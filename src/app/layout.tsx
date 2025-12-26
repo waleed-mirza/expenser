@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { RegisterSW } from "./register-sw";
+import { SplashScreen } from "@/components/SplashScreen";
 import "./globals.css";
 
 const inter = Inter({
@@ -29,7 +30,9 @@ export default function RootLayout({
         className={`${inter.variable} antialiased min-h-screen bg-background text-foreground`}
       >
         <RegisterSW />
-        <Providers>{children}</Providers>
+        <Providers>
+          <SplashScreen>{children}</SplashScreen>
+        </Providers>
       </body>
     </html>
   );
