@@ -13,6 +13,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
+  const [cachedUserId, setCachedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -26,10 +27,27 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem("lastUserId");
+    if (stored) setCachedUserId(stored);
+  }, []);
+
+  useEffect(() => {
+    if (!userId || typeof window === "undefined") return;
+    localStorage.setItem("lastUserId", userId);
+    setCachedUserId(userId);
+  }, [userId]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userId) {
-      setError("You must be signed in.");
+    const effectiveUserId = userId ?? cachedUserId;
+    if (!effectiveUserId) {
+      setError(
+        online
+          ? "You must be signed in."
+          : "Offline save needs a prior sign-in on this device."
+      );
       return;
     }
     setError(null);
@@ -48,7 +66,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       source: isOnline ? "online" : "offline",
     };
 
-    await enqueueTransaction(userId, payload);
+    await enqueueTransaction(effectiveUserId, payload);
     if (isOnline) {
       await fetch("/api/transactions", {
         method: "POST",
