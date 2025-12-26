@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { flushQueue } from "@/lib/sync";
+import { Wifi, WifiOff, CloudCog } from "lucide-react";
 
 export function SyncStatus() {
   const [online, setOnline] = useState(false);
@@ -25,38 +26,43 @@ export function SyncStatus() {
     if (!online) return;
     flushQueue().then((res) => {
       if (res.flushed) setMessage(`Synced ${res.flushed} pending item(s)`);
+      setTimeout(() => setMessage(null), 3000);
     });
   }, [online]);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-800 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-medium">Sync</span>
-        <span
-          className={`flex items-center gap-1 ${
+    <div className="flex flex-col gap-2 rounded-xl border border-border/50 bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-foreground">Connection Status</h3>
+        <div
+          className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
             !hydrated
-              ? "text-slate-500"
+              ? "bg-muted text-muted-foreground"
               : online
-              ? "text-emerald-600"
-              : "text-amber-600"
+              ? "bg-emerald-500/10 text-emerald-500"
+              : "bg-amber-500/10 text-amber-500"
           }`}
         >
-          <span
-            className={`h-2 w-2 rounded-full ${
-              !hydrated
-                ? "bg-slate-400"
-                : online
-                ? "bg-emerald-500"
-                : "bg-amber-500"
-            }`}
-          />
-          {!hydrated ? "Checking..." : online ? "Online" : "Offline"}
-        </span>
+          {!hydrated ? (
+            <CloudCog className="h-3.5 w-3.5 animate-pulse" />
+          ) : online ? (
+            <Wifi className="h-3.5 w-3.5" />
+          ) : (
+            <WifiOff className="h-3.5 w-3.5" />
+          )}
+          <span>{!hydrated ? "Checking..." : online ? "Online" : "Offline"}</span>
+        </div>
       </div>
-      {message && <p className="mt-1 text-xs text-slate-600">{message}</p>}
+      
+      {message && (
+        <div className="rounded-md bg-primary/10 px-3 py-2 text-xs text-primary animate-in fade-in slide-in-from-top-1">
+          {message}
+        </div>
+      )}
+      
       {!online && (
-        <p className="mt-1 text-xs text-amber-700">
-          Offline — entries will sync when back online.
+        <p className="text-xs text-muted-foreground">
+          Changes will be saved locally and synced when connection is restored.
         </p>
       )}
     </div>

@@ -4,12 +4,17 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { enqueueTransaction, flushQueue } from "@/lib/sync";
 import { v4 as uuid } from "uuid";
+import { Loader2 } from "lucide-react";
+import { twMerge } from "tailwind-merge";
+import { clsx } from "clsx";
+import { CategoryPicker } from "@/components/CategoryPicker";
 
 export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   const { data } = useSession();
   const userId = data?.user?.id;
-  const [amount, setAmount] = useState("0");
+  const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [categoryId, setCategoryId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
@@ -61,6 +66,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       amountCents: amountNumber,
       currencyCode: "PKR",
       note: note || undefined,
+      categoryId: categoryId || undefined,
       occurredAt: now.toISOString(),
       clientUpdatedAt: now.toISOString(),
       source: isOnline ? "online" : "offline",
@@ -77,51 +83,69 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       await flushQueue();
     }
 
-    setAmount("0");
+    setAmount("");
     setNote("");
+    setCategoryId("");
     setLoading(false);
     onSaved?.();
   };
 
   return (
-    <form
-      onSubmit={submit}
-      className="space-y-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm"
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-700">Add expense</span>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="text-sm font-medium text-slate-700">
-          Amount
+    <form onSubmit={submit} className="space-y-4">
+      <div>
+        <label className="mb-1 block text-sm font-medium text-foreground">
+          Amount (PKR)
+        </label>
+        <div className="relative">
           <input
             type="number"
             step="0.01"
             min="0"
             value={amount}
+            placeholder="0.00"
             onChange={(e) => setAmount(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-indigo-400 focus:outline-none"
+            className="w-full rounded-md border border-input bg-background/50 px-3 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             required
           />
-        </label>
-        <div />
+        </div>
       </div>
-      <label className="text-sm font-medium text-slate-700">
-        Note
+
+      <CategoryPicker value={categoryId} onChange={setCategoryId} />
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-foreground">
+          Note
+        </label>
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-indigo-400 focus:outline-none"
-          placeholder="What did you spend on?"
+          className="w-full rounded-md border border-input bg-background/50 px-3 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          placeholder="e.g. Lunch, Coffee..."
         />
-      </label>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      </div>
+
+      {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg bg-indigo-500 py-2 text-white font-semibold transition hover:bg-indigo-400 disabled:opacity-60"
+        className={twMerge(
+          clsx(
+            "flex w-full items-center justify-center rounded-md bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+            loading && "cursor-wait"
+          )
+        )}
       >
-        {loading ? "Saving..." : online ? "Save" : "Save offline"}
+        {loading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Saving...
+          </>
+        ) : online ? (
+          "Save Transaction"
+        ) : (
+          "Save Offline"
+        )}
       </button>
     </form>
   );

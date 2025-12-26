@@ -8,6 +8,8 @@ import {
   flushQueue,
 } from "@/lib/sync";
 import { format } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
+import { Edit2, Trash2, Save, X, Cloud, CloudOff } from "lucide-react";
 
 interface TxItem {
   id?: string;
@@ -146,101 +148,133 @@ export function TransactionList({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-800">Recent</h3>
-        {error && <span className="text-xs text-amber-600">{error}</span>}
-      </div>
-      <ul className="mt-3 space-y-2">
-        {items.map((tx) => (
-          <li
-            key={tx.clientId}
-            className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2"
-          >
-            <div className="flex flex-col flex-1">
-              {editingId === tx.clientId ? (
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={editAmount}
-                      onChange={(e) => setEditAmount(e.target.value)}
-                      className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-900"
-                    />
-                    <input
-                      value={editNote}
-                      onChange={(e) => setEditNote(e.target.value)}
-                      placeholder="Note"
-                      className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-900"
-                    />
+    <div className="space-y-4">
+      {error && (
+        <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-500 ring-1 ring-inset ring-amber-500/20">
+          {error}
+        </div>
+      )}
+      
+      <ul className="space-y-3">
+        <AnimatePresence initial={false} mode="popLayout">
+          {items.map((tx) => (
+            <motion.li
+              layout
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              key={tx.clientId}
+              className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/20 hover:shadow-md sm:flex-row sm:items-center"
+            >
+              <div className="flex flex-1 flex-col gap-1">
+                {editingId === tx.clientId ? (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">Amount</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editAmount}
+                        onChange={(e) => setEditAmount(e.target.value)}
+                        className="w-32 rounded-md border border-input bg-background/50 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <div className="flex flex-1 flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">Note</label>
+                      <input
+                        value={editNote}
+                        onChange={(e) => setEditNote(e.target.value)}
+                        placeholder="Note"
+                        className="w-full rounded-md border border-input bg-background/50 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={saveEdit}
-                      disabled={saving}
-                      className="rounded-md bg-indigo-500 px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
-                    >
-                      {saving ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelEdit}
-                      className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <span className="text-sm font-semibold text-slate-900">
-                    {(tx.amountCents / 100).toFixed(2)}{" "}
-                    {tx.currencyCode ?? "PKR"}
-                  </span>
-                  {tx.note && (
-                    <span className="text-xs text-slate-600">{tx.note}</span>
-                  )}
-                  <span className="text-xs text-slate-500">
-                    {format(new Date(tx.occurredAt), "PPp")}
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="flex flex-col items-end gap-1 pl-3">
-              <span
-                className={`text-xs ${
-                  tx.status === "queued" ? "text-amber-600" : "text-emerald-600"
-                }`}
-              >
-                {tx.status === "queued" ? "Pending" : "Synced"}
-              </span>
-              <div className="flex gap-2">
-                {editingId === tx.clientId ? null : (
-                  <button
-                    type="button"
-                    onClick={() => startEdit(tx)}
-                    className="text-xs font-semibold text-indigo-600 hover:underline"
-                  >
-                    Edit
-                  </button>
+                ) : (
+                  <>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-lg font-bold text-foreground">
+                        <span className="text-xs font-medium text-muted-foreground align-top mr-0.5">PKR</span>
+                        {(tx.amountCents / 100).toFixed(2)}
+                      </span>
+                      {tx.note && (
+                        <span className="text-sm text-foreground/80 line-clamp-1">
+                          {tx.note}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(tx.occurredAt), "MMM d, yyyy 'at' h:mm a")}
+                    </span>
+                  </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => deleteTx(tx)}
-                  disabled={deletingId === tx.clientId}
-                  className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-60"
-                >
-                  {deletingId === tx.clientId ? "Deleting..." : "Delete"}
-                </button>
               </div>
-            </div>
-          </li>
-        ))}
+
+              <div className="mt-4 flex items-center justify-between gap-4 border-t border-border pt-4 sm:border-t-0 sm:pt-0 sm:mt-0 sm:pl-4 sm:flex-col sm:items-end sm:gap-1">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                   {tx.status === "queued" ? (
+                    <span className="inline-flex items-center gap-1 text-amber-500">
+                      <CloudOff className="h-3 w-3" />
+                      Pending
+                    </span>
+                   ) : (
+                    <span className="inline-flex items-center gap-1 text-emerald-500">
+                      <Cloud className="h-3 w-3" />
+                      Synced
+                    </span>
+                   )}
+                </div>
+
+                <div className="flex gap-2">
+                  {editingId === tx.clientId ? (
+                    <>
+                      <button
+                        onClick={saveEdit}
+                        disabled={saving}
+                        className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                      >
+                        <Save className="h-3 w-3" />
+                        {saving ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/80"
+                      >
+                        <X className="h-3 w-3" />
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => startEdit(tx)}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteTx(tx)}
+                        disabled={deletingId === tx.clientId}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </motion.li>
+          ))}
+        </AnimatePresence>
+        
         {items.length === 0 && (
-          <li className="text-sm text-slate-600">No transactions yet.</li>
+          <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+            <p>No transactions yet.</p>
+            <p className="text-sm">Add one to get started!</p>
+          </div>
         )}
       </ul>
     </div>

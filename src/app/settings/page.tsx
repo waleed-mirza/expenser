@@ -1,9 +1,10 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { Nav } from "@/components/Nav";
 import { useEffect, useState } from "react";
 import { UnauthorizedPanel } from "@/components/UnauthorizedPanel";
+import { AppLayout } from "@/components/AppLayout";
+import { Loader2 } from "lucide-react";
 
 const currencies = ["PKR", "USD", "EUR", "GBP", "INR", "AED", "AUD", "CAD"];
 
@@ -43,41 +44,35 @@ export default function SettingsPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 text-white px-4 py-6">
-        <div className="mx-auto max-w-2xl text-center text-sm text-slate-200">
-          Checking session...
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (status === "unauthenticated") {
     return (
-      <div className="min-h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 px-4 py-10">
+      <div className="min-h-screen bg-background px-4 py-10">
         <UnauthorizedPanel />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 text-white px-4 py-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <Nav />
-      </header>
-      <main className="mt-6 max-w-2xl mx-auto space-y-6">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800">Profile</h3>
-          <p className="text-sm text-slate-600 mt-1">
+    <AppLayout title="Settings" userEmail={data?.user?.email}>
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-foreground">Profile</h3>
+          <p className="text-sm text-muted-foreground mt-1">
             Email: {data?.user?.email}
           </p>
           <div className="mt-4 space-y-4">
-            <label className="block text-sm font-medium text-slate-700">
+            <label className="block text-sm font-medium text-foreground">
               Preferred currency
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-indigo-400 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-input bg-background/50 px-3 py-2 text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 {currencies.map((c) => (
                   <option key={c} value={c}>
@@ -86,33 +81,33 @@ export default function SettingsPage() {
                 ))}
               </select>
             </label>
-            <label className="block text-sm font-medium text-slate-700">
+            <label className="block text-sm font-medium text-foreground">
               Timezone
               <input
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-indigo-400 focus:outline-none"
+                className="mt-1 w-full rounded-md border border-input bg-background/50 px-3 py-2 text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </label>
-            {message && <p className="text-sm text-emerald-600">{message}</p>}
+            {message && <p className="text-sm text-emerald-500">{message}</p>}
             <button
               onClick={save}
-              className="rounded-lg bg-indigo-500 px-4 py-2 text-white font-semibold transition hover:bg-indigo-400"
+              className="rounded-lg bg-primary px-4 py-2 text-primary-foreground font-semibold shadow-md shadow-primary/20 transition hover:bg-primary/90"
             >
-              Save
+              Save Changes
             </button>
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800">Account</h3>
+        <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-foreground">Account</h3>
           <button
             onClick={() => signOut({ callbackUrl: "/signin" })}
-            className="mt-3 rounded-lg bg-red-500 px-4 py-2 text-white font-semibold transition hover:bg-red-400"
+            className="mt-3 rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-2 text-destructive font-semibold transition hover:bg-destructive/20"
           >
             Sign out
           </button>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }

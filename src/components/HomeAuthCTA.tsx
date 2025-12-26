@@ -10,8 +10,8 @@ export function HomeAuthCTA() {
 
   if (loading) {
     return (
-      <div className="flex gap-3 text-sm text-slate-600" aria-live="polite">
-        <span className="rounded-full bg-slate-200 px-4 py-2">Loading...</span>
+      <div className="flex gap-3 text-sm text-muted-foreground" aria-live="polite">
+        <span className="rounded-full bg-muted px-4 py-2 animate-pulse">Loading...</span>
       </div>
     );
   }
@@ -21,14 +21,14 @@ export function HomeAuthCTA() {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/dashboard"
-          className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500"
+          className="rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-colors"
         >
           Go to dashboard
         </Link>
         <button
           type="button"
           onClick={() => signOut({ callbackUrl: "/" })}
-          className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+          className="rounded-full border border-input bg-background/50 backdrop-blur-sm px-6 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
         >
           Log out
         </button>
@@ -40,13 +40,13 @@ export function HomeAuthCTA() {
     <div className="flex flex-wrap gap-3">
       <Link
         href="/signup"
-        className="rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500"
+        className="rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-colors"
       >
         Sign up
       </Link>
       <Link
         href="/signin"
-        className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+        className="rounded-full border border-input bg-background/50 backdrop-blur-sm px-6 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
       >
         Log in
       </Link>

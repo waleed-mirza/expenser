@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { RegisterSW } from "./register-sw";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
 export const metadata: Metadata = {
@@ -19,7 +14,7 @@ export const metadata: Metadata = {
   description: "Offline-friendly expense tracker",
   manifest: "/manifest.json",
   viewport: "width=device-width, initial-scale=1",
-  themeColor: "#6366f1",
+  themeColor: "#09090b", // Zinc 950
 };
 
 export default function RootLayout({
@@ -28,10 +23,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} antialiased min-h-screen bg-background text-foreground`}
       >
         <RegisterSW />
         <Providers>{children}</Providers>
