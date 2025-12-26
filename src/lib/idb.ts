@@ -54,19 +54,10 @@ export async function saveTransactionLocal(value: any) {
   await db.put("transactions", value);
 }
 
-export async function saveCategoryLocal(value: any) {
-  const db = await getDb();
-  await db.put("categories", value);
-}
 
 export async function getTransactionsLocal(userId: string) {
   const db = await getDb();
   return db.getAllFromIndex("transactions", "userId", IDBKeyRange.only(userId));
-}
-
-export async function getCategoriesLocal(userId: string) {
-  const db = await getDb();
-  return db.getAllFromIndex("categories", "userId", IDBKeyRange.only(userId));
 }
 
 export async function queueOperation(op: {

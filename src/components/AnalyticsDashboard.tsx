@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { AnalyticsCharts } from "@/components/AnalyticsCharts";
-import { AnalyticsPieChart } from "@/components/AnalyticsPieChart";
 import { TrendingUp, TrendingDown, Target, Wallet } from "lucide-react";
 
 type Summary = {
@@ -146,13 +145,8 @@ export function AnalyticsDashboard() {
           </div>
 
           {/* Charts Grid */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-               <AnalyticsCharts start={start} end={end} />
-            </div>
-            <div className="lg:col-span-1">
-               <AnalyticsPieChart start={start} end={end} />
-            </div>
+          <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+             <AnalyticsCharts start={start} end={end} />
           </div>
         </>
       )}

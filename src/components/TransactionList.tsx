@@ -33,12 +33,14 @@ export function TransactionList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<string>("");
   const [editNote, setEditNote] = useState<string>("");
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
     const load = async () => {
+      setLoading(true);
       try {
         const res = await fetch(`/api/transactions?take=50`, {
           credentials: "include",
@@ -46,17 +48,20 @@ export function TransactionList({
         if (res.ok) {
           const data = await res.json();
           setItems(data.items ?? []);
-          return;
+        } else {
+          throw new Error("network");
         }
-        throw new Error("network");
       } catch (err) {
         setError("Showing cached data (offline)");
         const cached = await getTransactionsLocal(userId);
         setItems(cached ?? []);
+      } finally {
+        setLoading(false);
       }
     };
     load();
   }, [userId, refreshToken]);
+
 
   useEffect(() => {
     if (!editingId) return;
@@ -156,7 +161,23 @@ export function TransactionList({
       )}
       
       <ul className="space-y-3">
-        <AnimatePresence initial={false} mode="popLayout">
+        {loading && items.length === 0 ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex h-20 w-full animate-pulse rounded-xl border border-border bg-card p-4 shadow-sm"
+              >
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-24 rounded bg-muted"></div>
+                  <div className="h-3 w-32 rounded bg-muted"></div>
+                </div>
+                <div className="h-8 w-8 rounded bg-muted"></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <AnimatePresence initial={false} mode="popLayout">
           {items.map((tx) => (
             <motion.li
               layout
@@ -232,14 +253,14 @@ export function TransactionList({
                       <button
                         onClick={saveEdit}
                         disabled={saving}
-                        className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 active:scale-95 transition-transform disabled:opacity-50"
                       >
                         <Save className="h-3 w-3" />
                         {saving ? "Saving..." : "Save"}
                       </button>
                       <button
                         onClick={cancelEdit}
-                        className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/80"
+                        className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/80 active:scale-95 transition-transform"
                       >
                         <X className="h-3 w-3" />
                         Cancel
@@ -249,7 +270,7 @@ export function TransactionList({
                     <>
                       <button
                         onClick={() => startEdit(tx)}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors active:scale-90"
                         title="Edit"
                       >
                         <Edit2 className="h-4 w-4" />
@@ -257,7 +278,7 @@ export function TransactionList({
                       <button
                         onClick={() => deleteTx(tx)}
                         disabled={deletingId === tx.clientId}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors active:scale-90 disabled:opacity-50"
                         title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -268,7 +289,8 @@ export function TransactionList({
               </div>
             </motion.li>
           ))}
-        </AnimatePresence>
+          </AnimatePresence>
+        )}
         
         {items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">

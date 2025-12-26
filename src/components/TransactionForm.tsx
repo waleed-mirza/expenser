@@ -7,14 +7,12 @@ import { v4 as uuid } from "uuid";
 import { Loader2 } from "lucide-react";
 import { twMerge } from "tailwind-merge";
 import { clsx } from "clsx";
-import { CategoryPicker } from "@/components/CategoryPicker";
 
 export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   const { data } = useSession();
   const userId = data?.user?.id;
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [categoryId, setCategoryId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
@@ -66,7 +64,6 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       amountCents: amountNumber,
       currencyCode: "PKR",
       note: note || undefined,
-      categoryId: categoryId || undefined,
       occurredAt: now.toISOString(),
       clientUpdatedAt: now.toISOString(),
       source: isOnline ? "online" : "offline",
@@ -85,7 +82,6 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
 
     setAmount("");
     setNote("");
-    setCategoryId("");
     setLoading(false);
     onSaved?.();
   };
@@ -110,8 +106,6 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
         </div>
       </div>
 
-      <CategoryPicker value={categoryId} onChange={setCategoryId} />
-
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">
           Note
@@ -131,8 +125,8 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
         disabled={loading}
         className={twMerge(
           clsx(
-            "flex w-full items-center justify-center rounded-md bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-            loading && "cursor-wait"
+            "flex w-full items-center justify-center rounded-md border border-primary bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50",
+            loading && "cursor-wait opacity-80"
           )
         )}
       >

@@ -3,7 +3,6 @@ import {
   clearQueue,
   queueOperation,
   saveTransactionLocal,
-  saveCategoryLocal,
   markTransactionDeleted,
 } from "@/lib/idb";
 import { v4 as uuid } from "uuid";
@@ -56,27 +55,6 @@ export async function enqueueTransactionDelete(
   return clientId;
 }
 
-export async function enqueueCategory(userId: string, payload: any) {
-  const clientId = payload.clientId ?? uuid();
-  const clientUpdatedAt = payload.clientUpdatedAt ?? new Date().toISOString();
-  const record = {
-    ...payload,
-    clientId,
-    userId,
-    clientUpdatedAt,
-    status: "queued",
-  };
-  await saveCategoryLocal(record);
-  await queueOperation({
-    clientId,
-    entity: "category",
-    op: "upsert",
-    payload,
-    userId,
-    clientUpdatedAt,
-  });
-  return clientId;
-}
 
 export async function flushQueue() {
   if (typeof window === "undefined") return { flushed: 0 };

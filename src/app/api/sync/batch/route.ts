@@ -3,7 +3,6 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import {
-  categoryInputSchema,
   transactionDeleteSchema,
   transactionInputSchema,
 } from "@/lib/validators";
@@ -24,57 +23,7 @@ export async function POST(req: Request) {
 
   for (const item of json.items) {
     const { entity, op } = item as any;
-    if (entity === "category") {
-      const parsed = categoryInputSchema.safeParse(item.payload);
-      if (!parsed.success) {
-        results.push({
-          clientId: item.clientId,
-          status: "error",
-          error: "invalid category",
-        });
-        continue;
-      }
-      const payload = parsed.data;
-      if (op === "delete") {
-        await prisma.category.updateMany({
-          where: { userId, clientId: payload.clientId },
-          data: { isDeleted: true, clientUpdatedAt: payload.clientUpdatedAt },
-        });
-        results.push({ clientId: payload.clientId, status: "synced" });
-        continue;
-      }
-      const existing = await prisma.category.findFirst({
-        where: { userId, clientId: payload.clientId },
-      });
-      const incomingUpdated = payload.clientUpdatedAt.getTime();
-      if (existing && existing.clientUpdatedAt.getTime() > incomingUpdated) {
-        results.push({ clientId: payload.clientId, status: "skipped" });
-        continue;
-      }
-      const saved = await prisma.category.upsert({
-        where: { userId_clientId: { userId, clientId: payload.clientId } },
-        update: {
-          name: payload.name,
-          type: "expense",
-          color: payload.color,
-          isDeleted: false,
-          clientUpdatedAt: payload.clientUpdatedAt,
-        },
-        create: {
-          userId,
-          clientId: payload.clientId,
-          name: payload.name,
-          type: "expense",
-          color: payload.color,
-          clientUpdatedAt: payload.clientUpdatedAt,
-        },
-      });
-      results.push({
-        clientId: payload.clientId,
-        serverId: saved.id,
-        status: "synced",
-      });
-    } else if (entity === "transaction") {
+    if (entity === "transaction") {
       if (op === "delete") {
         const parsedDelete = transactionDeleteSchema.safeParse(item.payload);
         if (!parsedDelete.success) {
