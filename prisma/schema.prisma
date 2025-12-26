@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CategoryType {
+  expense
+}
+
+enum TransactionType {
+  expense
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String?
+  timezone     String        @default("Asia/Karachi")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  settings     UserSetting?
+  categories   Category[]
+  transactions Transaction[]
+}
+
+model UserSetting {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  currencyCode String   @default("PKR")
+  weekStart    String   @default("monday")
+  timezone     String   @default("Asia/Karachi")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model Category {
+  id              String        @id @default(cuid())
+  userId          String
+  clientId        String
+  name            String
+  type            CategoryType  @default(expense)
+  color           String?
+  isDeleted       Boolean       @default(false)
+  clientUpdatedAt DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id])
+  transactions    Transaction[]
+
+  @@unique([userId, clientId])
+  @@unique([userId, name, type])
+  @@index([userId, updatedAt])
+}
+
+model Transaction {
+  id              String          @id @default(cuid())
+  userId          String
+  clientId        String
+  categoryId      String?
+  type            TransactionType @default(expense)
+  amountCents     Int
+  currencyCode    String          @default("PKR")
+  note            String?
+  occurredAt      DateTime
+  clientUpdatedAt DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  syncedAt        DateTime?
+  isDeleted       Boolean         @default(false)
+  source          String?
+  user            User            @relation(fields: [userId], references: [id])
+  category        Category?       @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, clientId])
+  @@index([userId, occurredAt])
+  @@index([userId, updatedAt])
+  @@index([categoryId])
+}
