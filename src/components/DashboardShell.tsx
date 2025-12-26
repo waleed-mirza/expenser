@@ -10,8 +10,8 @@ export function DashboardShell({
   userId,
   userEmail,
 }: {
-  userId?: string;
-  userEmail?: string;
+  userId?: string | null;
+  userEmail?: string | null;
 }) {
   const [refreshToken, setRefreshToken] = useState(0);
 
@@ -29,7 +29,7 @@ export function DashboardShell({
       <main className="mt-6 max-w-5xl mx-auto space-y-6">
         <SyncStatus />
         <TransactionForm onSaved={handleSaved} />
-        <TransactionList userId={userId} refreshToken={refreshToken} />
+        <TransactionList userId={userId ?? undefined} refreshToken={refreshToken} />
       </main>
     </div>
   );

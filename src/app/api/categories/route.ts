@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     where: { userId_clientId: { userId, clientId: payload.clientId } },
     update: {
       name: payload.name,
-      type: payload.type,
+      type: "expense",
       color: payload.color,
       clientUpdatedAt: payload.clientUpdatedAt,
       isDeleted: false,
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       userId,
       clientId: payload.clientId,
       name: payload.name,
-      type: payload.type,
+      type: "expense",
       color: payload.color,
       clientUpdatedAt: payload.clientUpdatedAt,
     },
