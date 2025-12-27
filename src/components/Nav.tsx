@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, CreditCard, BarChart3, Settings } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { motion } from "framer-motion";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -18,25 +19,44 @@ export function Nav() {
 
   return (
     <nav className="flex items-center gap-2">
-      {links.map((link) => {
+      {links.map((link, index) => {
         const Icon = link.icon;
         const isActive = pathname === link.href;
         return (
-          <Link
+          <motion.div
             key={link.href}
-            href={link.href}
-            className={twMerge(
-              clsx(
-                "flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-all shadow-sm",
-                isActive
-                  ? "border-primary bg-primary text-primary-foreground shadow-md"
-                  : "border-border/40 bg-card/50 text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:border-border"
-              )
-            )}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1, duration: 0.3 }}
           >
-            <Icon className="h-4 w-4" />
-            <span className="hidden sm:inline-block">{link.label}</span>
-          </Link>
+            <Link
+              href={link.href}
+              className={twMerge(
+                clsx(
+                  "relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
+                  isActive
+                    ? "bg-gradient-to-r from-primary to-purple-600 text-primary-foreground shadow-lg shadow-primary/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/60 backdrop-blur-sm"
+                )
+              )}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary to-purple-600 -z-10"
+                  initial={false}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                />
+              )}
+              <Icon
+                className={clsx(
+                  "h-4 w-4 transition-transform",
+                  isActive && "scale-110"
+                )}
+              />
+              <span className="hidden sm:inline-block">{link.label}</span>
+            </Link>
+          </motion.div>
         );
       })}
     </nav>

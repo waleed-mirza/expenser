@@ -1,79 +1,169 @@
+"use client";
+
 import Link from "next/link";
 import { HomeAuthCTA } from "@/components/HomeAuthCTA";
-import { Wallet, ShieldCheck, Database } from "lucide-react";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
+import { Wallet, ShieldCheck, Database, Sparkles, TrendingUp, Zap } from "lucide-react";
+import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
-export default async function Home() {
-  const session = await getServerSession(authOptions);
-  if (session?.user) {
-    redirect("/dashboard");
-  }
+export default function Home() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/30">
+    <div className="min-h-screen bg-background text-foreground overflow-hidden">
+      {/* Animated Background */}
+      <div className="fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-blue-900/20 to-pink-900/20" />
+        <motion.div
+          className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"
+          animate={{
+            x: [0, 100, 0],
+            y: [0, 50, 0],
+            scale: [1, 1.2, 1],
+          }}
+          transition={{
+            duration: 20,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+        <motion.div
+          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl"
+          animate={{
+            x: [0, -100, 0],
+            y: [0, -50, 0],
+            scale: [1, 1.2, 1],
+          }}
+          transition={{
+            duration: 25,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      </div>
+
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-24 pb-16 md:pt-32 md:pb-24">
-        <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80">
-          <div
-            className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-20 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]"
-            style={{
-              clipPath:
-                "polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)",
-            }}
-          />
-        </div>
-
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
-            <div className="mb-8 flex justify-center">
-              <div className="rounded-full bg-primary/10 px-3 py-1 text-sm leading-6 text-primary ring-1 ring-inset ring-primary/20">
-                Expense tracking, reimagined
-              </div>
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
-              Keep your finances in sync <span className="text-primary">anywhere</span>.
-            </h1>
-            <p className="mt-6 text-lg leading-8 text-muted-foreground">
+          <div className="mx-auto max-w-3xl text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="mb-8 flex justify-center"
+            >
+              <motion.div
+                className="rounded-full bg-gradient-to-r from-primary/20 via-purple-500/20 to-pink-500/20 backdrop-blur-xl px-4 py-2 text-sm leading-6 text-primary border border-primary/30 shadow-lg shadow-primary/20"
+                whileHover={{ scale: 1.05 }}
+                animate={{ 
+                  boxShadow: [
+                    "0 0 20px rgba(139, 92, 246, 0.3)",
+                    "0 0 40px rgba(139, 92, 246, 0.4)",
+                    "0 0 20px rgba(139, 92, 246, 0.3)",
+                  ]
+                }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                ✨ Expense tracking, reimagined
+              </motion.div>
+            </motion.div>
+            
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="text-5xl font-bold tracking-tight sm:text-7xl"
+            >
+              <span className="bg-gradient-to-r from-foreground via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Keep your finances
+              </span>
+              <br />
+              <span className="bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                in sync anywhere
+              </span>
+            </motion.h1>
+            
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="mt-6 text-xl leading-8 text-muted-foreground"
+            >
               Expenser works offline, syncs automatically, and gives you powerful insights.
+              <br />
               Control your money with a modern, secure, and fast interface.
-            </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
+            </motion.p>
+            
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="mt-10 flex items-center justify-center gap-x-6"
+            >
               <HomeAuthCTA />
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
 
       {/* Features Grid */}
       <section className="mx-auto max-w-7xl px-6 lg:px-8 pb-24">
-        <div className="grid gap-8 sm:grid-cols-3">
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="grid gap-8 sm:grid-cols-3"
+        >
           <FeatureCard
-            icon={<Wallet className="h-6 w-6 text-primary" />}
+            index={0}
+            icon={<Wallet className="h-6 w-6" />}
             title="Offline-first"
             body="Transactions queue locally with IndexedDB and sync when online."
+            gradient="from-blue-500 to-cyan-500"
           />
           <FeatureCard
-            icon={<ShieldCheck className="h-6 w-6 text-primary" />}
+            index={1}
+            icon={<ShieldCheck className="h-6 w-6" />}
             title="Secure Login"
             body="Credentials-based login with JWT sessions via NextAuth."
+            gradient="from-purple-500 to-pink-500"
           />
           <FeatureCard
-            icon={<Database className="h-6 w-6 text-primary" />}
+            index={2}
+            icon={<Database className="h-6 w-6" />}
             title="Prisma + Postgres"
             body="Reliable serverless PostgreSQL with robust schema management."
+            gradient="from-pink-500 to-rose-500"
           />
-        </div>
+        </motion.div>
 
-        <footer className="mt-24 text-center text-sm text-muted-foreground">
+        <motion.footer
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.4 }}
+          className="mt-24 text-center"
+        >
           <Link
             href="/dashboard"
-            className="font-medium text-primary hover:text-primary/80 transition-colors"
+            className="group inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
           >
-            Already have an account? Jump to dashboard &rarr;
+            Already have an account? Jump to dashboard
+            <motion.span
+              animate={{ x: [0, 5, 0] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            >
+              →
+            </motion.span>
           </Link>
-        </footer>
+        </motion.footer>
       </section>
     </div>
   );
@@ -83,20 +173,36 @@ function FeatureCard({
   title,
   body,
   icon,
+  index,
+  gradient,
 }: {
   title: string;
   body: string;
   icon: React.ReactNode;
+  index: number;
+  gradient: string;
 }) {
   return (
-    <div className="group relative rounded-2xl border border-border bg-card p-6 shadow-sm transition-all hover:shadow-md hover:border-primary/20 hover:bg-card/50">
-      <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay: index * 0.1 }}
+      whileHover={{ y: -8, scale: 1.02 }}
+      className="group relative rounded-2xl border border-border/50 bg-card/50 backdrop-blur-xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
+    >
+      <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`} />
+      <motion.div
+        className={`mb-6 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-lg shadow-primary/30`}
+        whileHover={{ rotate: 5, scale: 1.1 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+      >
         {icon}
-      </div>
-      <h3 className="text-lg font-semibold leading-7 text-foreground">
+      </motion.div>
+      <h3 className="text-xl font-bold leading-7 text-foreground mb-3">
         {title}
       </h3>
-      <p className="mt-2 text-base leading-7 text-muted-foreground">{body}</p>
-    </div>
+      <p className="text-base leading-7 text-muted-foreground">{body}</p>
+    </motion.div>
   );
 }

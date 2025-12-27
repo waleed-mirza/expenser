@@ -16,12 +16,15 @@ export async function GET(req: Request) {
     new Date(new Date().setDate(new Date().getDate() - 30)).toISOString();
   const end = searchParams.get("end") || new Date().toISOString();
 
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  
   const where = {
     userId,
     isDeleted: false,
     occurredAt: {
-      gte: new Date(start),
-      lt: new Date(end),
+      gte: startDate,
+      lte: endDate,
     },
   } as const;
 
@@ -45,8 +48,6 @@ export async function GET(req: Request) {
 
   const expenseSum = Number(expenseAgg._sum.amountCents ?? 0);
 
-  const startDate = new Date(start);
-  const endDate = new Date(end);
   const ms = endDate.getTime() - startDate.getTime();
   const days = Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
   const avgDaily = Math.floor(expenseSum / days);

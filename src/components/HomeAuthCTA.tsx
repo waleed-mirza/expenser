@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
+import { motion } from "framer-motion";
 
 export function HomeAuthCTA() {
   const { data, status } = useSession();
@@ -18,38 +19,46 @@ export function HomeAuthCTA() {
 
   if (user) {
     return (
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/dashboard"
-          className="rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-colors"
-        >
-          Go to dashboard
-        </Link>
-        <button
+      <div className="flex flex-wrap gap-3 justify-center">
+        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+          >
+            Go to dashboard
+          </Link>
+        </motion.div>
+        <motion.button
           type="button"
           onClick={() => signOut({ callbackUrl: "/" })}
-          className="rounded-full border border-input bg-background/50 backdrop-blur-sm px-6 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="rounded-full border-2 border-border/50 bg-background/80 backdrop-blur-xl px-8 py-3.5 text-sm font-semibold text-foreground hover:bg-card/80 hover:border-primary/30 transition-all shadow-lg"
         >
           Log out
-        </button>
+        </motion.button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap gap-3">
-      <Link
-        href="/signup"
-        className="rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90 transition-colors"
-      >
-        Sign up
-      </Link>
-      <Link
-        href="/signin"
-        className="rounded-full border border-input bg-background/50 backdrop-blur-sm px-6 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-      >
-        Log in
-      </Link>
+    <div className="flex flex-wrap gap-3 justify-center">
+      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+        <Link
+          href="/signup"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+        >
+          Get Started
+        </Link>
+      </motion.div>
+      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+        <Link
+          href="/signin"
+          className="rounded-full border-2 border-border/50 bg-background/80 backdrop-blur-xl px-8 py-3.5 text-sm font-semibold text-foreground hover:bg-card/80 hover:border-primary/30 transition-all shadow-lg"
+        >
+          Log in
+        </Link>
+      </motion.div>
     </div>
   );
 }

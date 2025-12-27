@@ -7,6 +7,7 @@ import { v4 as uuid } from "uuid";
 import { Loader2 } from "lucide-react";
 import { twMerge } from "tailwind-merge";
 import { clsx } from "clsx";
+import { motion } from "framer-motion";
 
 export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   const { data } = useSession();
@@ -87,9 +88,13 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <div>
-        <label className="mb-1 block text-sm font-medium text-foreground">
+    <form onSubmit={submit} className="space-y-5">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <label className="mb-2 block text-sm font-medium text-foreground">
           Amount (PKR)
         </label>
         <div className="relative">
@@ -100,39 +105,54 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
             value={amount}
             placeholder="0.00"
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded-md border border-input bg-background/50 px-3 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm px-4 py-3 text-foreground shadow-sm placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all"
             required
           />
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/5 to-purple-500/5 pointer-events-none opacity-0 focus-within:opacity-100 transition-opacity" />
         </div>
-      </div>
+      </motion.div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-foreground">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <label className="mb-2 block text-sm font-medium text-foreground">
           Note
         </label>
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="w-full rounded-md border border-input bg-background/50 px-3 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm px-4 py-3 text-foreground shadow-sm placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all"
           placeholder="e.g. Lunch, Coffee..."
         />
-      </div>
+      </motion.div>
 
-      {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+      {error && (
+        <motion.p
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-sm font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2"
+        >
+          {error}
+        </motion.p>
+      )}
 
-      <button
+      <motion.button
         type="submit"
         disabled={loading}
+        whileHover={{ scale: loading ? 1 : 1.01 }}
+        whileTap={{ scale: loading ? 1 : 0.99 }}
         className={twMerge(
           clsx(
-            "flex w-full items-center justify-center rounded-md border border-primary bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50",
-            loading && "cursor-wait opacity-80"
+            "flex w-full items-center justify-center rounded-xl border-0 bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+            loading && "cursor-wait"
           )
         )}
       >
         {loading ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             Saving...
           </>
         ) : online ? (
@@ -140,7 +160,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
         ) : (
           "Save Offline"
         )}
-      </button>
+      </motion.button>
     </form>
   );
 }
