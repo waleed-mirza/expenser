@@ -108,7 +108,6 @@
       radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
       radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.1) 0px, transparent 50%),
       radial-gradient(at 0% 100%, rgba(251, 146, 60, 0.1) 0px, transparent 50%);
-    background-attachment: fixed;
     /* Prevent mobile scroll issues */
     overscroll-behavior-y: contain;
   }

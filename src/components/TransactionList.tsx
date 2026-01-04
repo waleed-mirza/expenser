@@ -179,11 +179,7 @@ export function TransactionList({
   return (
     <div className="space-y-6">
       {/* Date Filters */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-xl border border-border/50 bg-card/60 backdrop-blur-sm p-4"
-      >
+      <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -225,17 +221,15 @@ export function TransactionList({
             </div>
           </div>
           {(startDate || endDate) && (
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+            <button
               onClick={clearFilters}
               className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               Clear
-            </motion.button>
+            </button>
           )}
         </div>
-      </motion.div>
+      </div>
 
       {error && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 text-sm font-medium text-amber-600 dark:text-amber-500">
@@ -272,17 +266,12 @@ export function TransactionList({
           <AnimatePresence initial={false} mode="popLayout">
           {items.map((tx) => (
             <motion.li
-              layout
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9, x: -20 }}
-              transition={{ 
-                duration: 0.3,
-                layout: { type: "spring", stiffness: 500, damping: 30 }
-              }}
-              whileHover={{ y: -2, scale: 1.01 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
               key={tx.clientId}
-              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border-2 border-border/50 bg-card/60 backdrop-blur-xl p-5 shadow-lg transition-all hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10 sm:flex-row sm:items-center"
+              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border-2 border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-lg transition-all hover:border-primary/40 sm:flex-row sm:items-center"
             >
               <div className="flex flex-1 flex-col gap-1">
                 {editingId === tx.clientId ? (
@@ -347,47 +336,39 @@ export function TransactionList({
                 <div className="flex gap-2">
                   {editingId === tx.clientId ? (
                     <>
-                      <motion.button
+                      <button
                         onClick={saveEdit}
                         disabled={saving}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50"
                       >
                         <Save className="h-3.5 w-3.5" />
                         {saving ? "Saving..." : "Save"}
-                      </motion.button>
-                      <motion.button
+                      </button>
+                      <button
                         onClick={cancelEdit}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/80 transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/80 active:scale-95 transition-all"
                       >
                         <X className="h-3.5 w-3.5" />
                         Cancel
-                      </motion.button>
+                      </button>
                     </>
                   ) : (
                     <>
-                      <motion.button
+                      <button
                         onClick={() => startEdit(tx)}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                        className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary active:scale-95 transition-all"
                         title="Edit"
                       >
                         <Edit2 className="h-4 w-4" />
-                      </motion.button>
-                      <motion.button
+                      </button>
+                      <button
                         onClick={() => deleteTx(tx)}
                         disabled={deletingId === tx.clientId}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+                        className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive active:scale-95 transition-all disabled:opacity-50"
                         title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />
-                      </motion.button>
+                      </button>
                     </>
                   )}
                 </div>
