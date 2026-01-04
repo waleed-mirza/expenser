@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { getTransactionsLocal } from "@/lib/idb";
 import {
   enqueueTransaction,
@@ -40,11 +40,12 @@ export function TransactionList({
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [page, setPage] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const { observerRef, isIntersecting } = useInfiniteScroll({ threshold: 1.0 });
+  const { observerRef, isIntersecting } = useInfiniteScroll({ threshold: 0.1, rootMargin: "100px" });
+  const loadingMoreRef = useRef(false);
 
   // Initial load and filter changes
   useEffect(() => {
@@ -102,13 +103,14 @@ export function TransactionList({
 
   // Load more when scrolling
   useEffect(() => {
-    if (!userId || !isIntersecting || !hasMore || loadingMore || loading) return;
+    if (!userId || !isIntersecting || !hasMore || loadingMore || loading || loadingMoreRef.current) {
+      return;
+    }
 
     const loadMore = async () => {
+      loadingMoreRef.current = true;
       setLoadingMore(true);
-      const currentPage = page; // Capture current page to prevent stale closure
-      const nextPage = currentPage + 1;
-      const skip = nextPage * 10;
+      const skip = (page + 1) * 10;
 
       try {
         const params = new URLSearchParams({ take: "10", skip: String(skip) });
@@ -126,26 +128,21 @@ export function TransactionList({
           const data = await res.json();
           const newItems = data.items ?? [];
 
-          // Only append if we're still on the same page (prevent race condition)
-          setPage((prevPage) => {
-            if (prevPage === currentPage) {
-              setItems((prev) => [...prev, ...newItems]);
-              setTotal(data.total ?? 0);
-              setHasMore(skip + newItems.length < (data.total ?? 0));
-              return nextPage;
-            }
-            return prevPage; // Don't update if page changed (filters changed)
-          });
+          setItems((prev) => [...prev, ...newItems]);
+          setTotal(data.total ?? 0);
+          setHasMore(skip + newItems.length < (data.total ?? 0));
+          setPage((prev) => prev + 1);
         }
       } catch (err) {
-        console.error("Error loading more transactions:", err);
+        console.error("[Pagination] Error loading more transactions:", err);
       } finally {
         setLoadingMore(false);
+        loadingMoreRef.current = false;
       }
     };
 
     loadMore();
-  }, [isIntersecting]);
+  }, [isIntersecting, userId, hasMore, loadingMore, loading, page, startDate, endDate]);
 
 
   useEffect(() => {
@@ -343,7 +340,7 @@ export function TransactionList({
             ))}
           </div>
         ) : (
-          <AnimatePresence initial={false} mode="wait">
+          <AnimatePresence initial={false}>
           {items.map((tx) => (
             <motion.li
               initial={{ opacity: 0 }}
@@ -464,12 +461,14 @@ export function TransactionList({
 
         {/* Infinite scroll sentinel */}
         {items.length > 0 && hasMore && (
-          <div ref={observerRef} className="py-4 flex justify-center">
-            {loadingMore && (
+          <div ref={observerRef} className="py-4 flex justify-center min-h-15">
+            {loadingMore ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Loading more transactions...</span>
               </div>
+            ) : (
+              <div className="h-4" />
             )}
           </div>
         )}
