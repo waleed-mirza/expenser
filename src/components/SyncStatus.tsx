@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { flushQueue } from "@/lib/sync";
 import { Wifi, WifiOff, CloudCog } from "lucide-react";
-import { motion } from "framer-motion";
 
 export function SyncStatus() {
   const [online, setOnline] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -25,26 +25,38 @@ export function SyncStatus() {
 
   useEffect(() => {
     if (!online) return;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let mounted = true;
+
     flushQueue().then((res) => {
-      if (res.flushed) setMessage(`Synced ${res.flushed} pending item(s)`);
-      setTimeout(() => setMessage(null), 3000);
+      if (!mounted) return; // Prevent state updates on unmounted component
+
+      if (res.failed) {
+        setSyncError(res.error || "Sync failed. Will retry when you're online.");
+        timeoutId = setTimeout(() => {
+          if (mounted) setSyncError(null);
+        }, 5000);
+      } else if (res.flushed) {
+        setMessage(`Synced ${res.flushed} pending item(s)`);
+        setSyncError(null);
+        timeoutId = setTimeout(() => {
+          if (mounted) setMessage(null);
+        }, 3000);
+      }
     });
+
+    return () => {
+      mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [online]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="flex flex-col gap-3 rounded-2xl border-2 border-border/50 bg-card/60 backdrop-blur-xl p-5 shadow-lg"
-    >
+    <div className="flex flex-col gap-3 rounded-2xl border-2 border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-lg">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-foreground">Connection Status</h3>
-        <motion.div
-          initial={{ scale: 0.9 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold shadow-md ${
+        <div
+          className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold shadow-md transition-all ${
             !hydrated
               ? "bg-muted text-muted-foreground"
               : online
@@ -53,50 +65,33 @@ export function SyncStatus() {
           }`}
         >
           {!hydrated ? (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            >
-              <CloudCog className="h-4 w-4" />
-            </motion.div>
+            <CloudCog className="h-4 w-4 animate-pulse" />
           ) : online ? (
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Wifi className="h-4 w-4" />
-            </motion.div>
+            <Wifi className="h-4 w-4" />
           ) : (
-            <motion.div
-              animate={{ x: [0, 2, 0] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
-              <WifiOff className="h-4 w-4" />
-            </motion.div>
+            <WifiOff className="h-4 w-4" />
           )}
           <span>{!hydrated ? "Checking..." : online ? "Online" : "Offline"}</span>
-        </motion.div>
+        </div>
       </div>
       
       {message && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl bg-gradient-to-r from-primary/20 to-purple-500/20 border border-primary/30 px-4 py-2.5 text-xs font-semibold text-primary backdrop-blur-sm"
-        >
+        <div className="rounded-xl bg-gradient-to-r from-primary/20 to-purple-500/20 border border-primary/30 px-4 py-2.5 text-xs font-semibold text-primary backdrop-blur-sm animate-pulse">
           {message}
-        </motion.div>
+        </div>
       )}
-      
+
+      {syncError && (
+        <div className="rounded-xl bg-gradient-to-r from-destructive/20 to-red-500/20 border border-destructive/30 px-4 py-2.5 text-xs font-semibold text-destructive backdrop-blur-sm">
+          {syncError}
+        </div>
+      )}
+
       {!online && (
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-xs font-medium text-muted-foreground bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2"
-        >
+        <p className="text-xs font-medium text-muted-foreground bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
           Changes will be saved locally and synced when connection is restored.
-        </motion.p>
+        </p>
       )}
-    </motion.div>
+    </div>
   );
 }

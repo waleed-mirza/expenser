@@ -45,6 +45,10 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent double-submission
+    if (loading) return;
+
     const effectiveUserId = userId ?? cachedUserId;
     if (!effectiveUserId) {
       setError(
@@ -70,21 +74,32 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       source: isOnline ? "online" : "offline",
     };
 
-    await enqueueTransaction(effectiveUserId, payload);
-    if (isOnline) {
-      await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      }).catch(() => null);
-      await flushQueue();
-    }
+    try {
+      await enqueueTransaction(effectiveUserId, payload);
+      if (isOnline) {
+        const res = await fetch("/api/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
 
-    setAmount("");
-    setNote("");
-    setLoading(false);
-    onSaved?.();
+        if (!res.ok) {
+          console.error("Failed to save transaction:", await res.text());
+        }
+
+        await flushQueue();
+      }
+
+      setAmount("");
+      setNote("");
+      onSaved?.();
+    } catch (err) {
+      console.error("Error saving transaction:", err);
+      setError("Failed to save transaction. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -141,6 +156,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       <motion.button
         type="submit"
         disabled={loading}
+        aria-label={online ? "Save transaction" : "Save transaction offline"}
         whileHover={{ scale: loading ? 1 : 1.01 }}
         whileTap={{ scale: loading ? 1 : 0.99 }}
         className={twMerge(

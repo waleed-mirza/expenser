@@ -55,9 +55,20 @@ export async function saveTransactionLocal(value: any) {
 }
 
 
-export async function getTransactionsLocal(userId: string) {
+export async function getTransactionsLocal(userId: string, limit = 50) {
   const db = await getDb();
-  return db.getAllFromIndex("transactions", "userId", IDBKeyRange.only(userId));
+  const tx = db.transaction("transactions", "readonly");
+  const index = tx.objectStore("transactions").index("userId");
+
+  const results: any[] = [];
+  let cursor = await index.openCursor(IDBKeyRange.only(userId), "prev"); // newest first
+
+  while (cursor && results.length < limit) {
+    results.push(cursor.value);
+    cursor = await cursor.continue();
+  }
+
+  return results;
 }
 
 export async function queueOperation(op: {
@@ -93,8 +104,16 @@ export async function getQueuedOps(limit = 100) {
   const db = await getDb();
   const tx = db.transaction("queue", "readonly");
   const store = tx.objectStore("queue");
-  const all = await store.getAll();
-  return all.slice(0, limit);
+
+  const results: any[] = [];
+  let cursor = await store.openCursor();
+
+  while (cursor && results.length < limit) {
+    results.push({ id: cursor.key, ...cursor.value });
+    cursor = await cursor.continue();
+  }
+
+  return results;
 }
 
 export async function clearQueue() {

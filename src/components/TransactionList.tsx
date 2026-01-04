@@ -9,7 +9,8 @@ import {
 } from "@/lib/sync";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
-import { Edit2, Trash2, Save, X, Cloud, CloudOff, Calendar, Filter } from "lucide-react";
+import { Edit2, Trash2, Save, X, Cloud, CloudOff, Calendar, Filter, Loader2 } from "lucide-react";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 
 interface TxItem {
   id?: string;
@@ -38,35 +39,113 @@ export function TransactionList({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
+  const { observerRef, isIntersecting } = useInfiniteScroll({ threshold: 1.0 });
+
+  // Initial load and filter changes
   useEffect(() => {
     if (!userId) return;
+    const abortController = new AbortController();
+
     const load = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const params = new URLSearchParams({ take: "50" });
+        const params = new URLSearchParams({ take: "10", skip: "0" });
         if (startDate) params.append("start", new Date(startDate).toISOString());
-        if (endDate) params.append("end", new Date(endDate + "T23:59:59").toISOString());
-        
+        if (endDate) {
+          const endDateTime = `${endDate}T23:59:59.999Z`;
+          params.append("end", endDateTime);
+        }
+
         const res = await fetch(`/api/transactions?${params.toString()}`, {
           credentials: "include",
+          signal: abortController.signal,
         });
         if (res.ok) {
           const data = await res.json();
           setItems(data.items ?? []);
+          setTotal(data.total ?? 0);
+          setHasMore((data.items?.length ?? 0) < (data.total ?? 0));
+          setPage(0);
         } else {
           throw new Error("network");
         }
-      } catch (err) {
-        setError("Showing cached data (offline)");
-        const cached = await getTransactionsLocal(userId);
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+
+        // Determine if error is due to being offline or server error
+        const isOffline = !navigator.onLine;
+        setError(
+          isOffline
+            ? "You're offline - showing cached transactions"
+            : "Failed to load transactions - showing cached data"
+        );
+
+        const cached = await getTransactionsLocal(userId, 50);
         setItems(cached ?? []);
+        setHasMore(false);
       } finally {
         setLoading(false);
       }
     };
     load();
+
+    return () => {
+      abortController.abort();
+    };
   }, [userId, refreshToken, startDate, endDate]);
+
+  // Load more when scrolling
+  useEffect(() => {
+    if (!userId || !isIntersecting || !hasMore || loadingMore || loading) return;
+
+    const loadMore = async () => {
+      setLoadingMore(true);
+      const currentPage = page; // Capture current page to prevent stale closure
+      const nextPage = currentPage + 1;
+      const skip = nextPage * 10;
+
+      try {
+        const params = new URLSearchParams({ take: "10", skip: String(skip) });
+        if (startDate) params.append("start", new Date(startDate).toISOString());
+        if (endDate) {
+          const endDateTime = `${endDate}T23:59:59.999Z`;
+          params.append("end", endDateTime);
+        }
+
+        const res = await fetch(`/api/transactions?${params.toString()}`, {
+          credentials: "include",
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const newItems = data.items ?? [];
+
+          // Only append if we're still on the same page (prevent race condition)
+          setPage((prevPage) => {
+            if (prevPage === currentPage) {
+              setItems((prev) => [...prev, ...newItems]);
+              setTotal(data.total ?? 0);
+              setHasMore(skip + newItems.length < (data.total ?? 0));
+              return nextPage;
+            }
+            return prevPage; // Don't update if page changed (filters changed)
+          });
+        }
+      } catch (err) {
+        console.error("Error loading more transactions:", err);
+      } finally {
+        setLoadingMore(false);
+      }
+    };
+
+    loadMore();
+  }, [isIntersecting]);
 
 
   useEffect(() => {
@@ -223,6 +302,7 @@ export function TransactionList({
           {(startDate || endDate) && (
             <button
               onClick={clearFilters}
+              aria-label="Clear date filters"
               className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               Clear
@@ -263,7 +343,7 @@ export function TransactionList({
             ))}
           </div>
         ) : (
-          <AnimatePresence initial={false} mode="popLayout">
+          <AnimatePresence initial={false} mode="wait">
           {items.map((tx) => (
             <motion.li
               initial={{ opacity: 0 }}
@@ -339,6 +419,7 @@ export function TransactionList({
                       <button
                         onClick={saveEdit}
                         disabled={saving}
+                        aria-label="Save transaction changes"
                         className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50"
                       >
                         <Save className="h-3.5 w-3.5" />
@@ -346,6 +427,7 @@ export function TransactionList({
                       </button>
                       <button
                         onClick={cancelEdit}
+                        aria-label="Cancel editing transaction"
                         className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/80 active:scale-95 transition-all"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -356,6 +438,7 @@ export function TransactionList({
                     <>
                       <button
                         onClick={() => startEdit(tx)}
+                        aria-label={`Edit transaction: ${(tx.amountCents / 100).toFixed(2)} PKR ${tx.note ? '- ' + tx.note : ''}`}
                         className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary active:scale-95 transition-all"
                         title="Edit"
                       >
@@ -364,6 +447,7 @@ export function TransactionList({
                       <button
                         onClick={() => deleteTx(tx)}
                         disabled={deletingId === tx.clientId}
+                        aria-label={`Delete transaction: ${(tx.amountCents / 100).toFixed(2)} PKR ${tx.note ? '- ' + tx.note : ''}`}
                         className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive active:scale-95 transition-all disabled:opacity-50"
                         title="Delete"
                       >
@@ -377,7 +461,28 @@ export function TransactionList({
           ))}
           </AnimatePresence>
         )}
-        
+
+        {/* Infinite scroll sentinel */}
+        {items.length > 0 && hasMore && (
+          <div ref={observerRef} className="py-4 flex justify-center">
+            {loadingMore && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Loading more transactions...</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* End of list message */}
+        {items.length > 0 && !hasMore && !loading && (
+          <div className="py-8 flex justify-center">
+            <p className="text-sm font-medium text-muted-foreground bg-muted/30 px-4 py-2 rounded-lg">
+              No more transactions
+            </p>
+          </div>
+        )}
+
         {items.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-base font-medium text-foreground mb-1">No transactions found</p>

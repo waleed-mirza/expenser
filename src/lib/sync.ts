@@ -62,17 +62,26 @@ export async function flushQueue() {
   const ops = await getQueuedOps(200);
   if (!ops.length) return { flushed: 0 };
 
-  const res = await fetch("/api/sync/batch", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ items: ops }),
-  });
-  if (!res.ok) {
-    return { flushed: 0, error: await res.text() };
+  try {
+    const res = await fetch("/api/sync/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ items: ops }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("Sync failed:", errorText);
+      return { flushed: 0, error: errorText, failed: true };
+    }
+
+    const data = await res.json();
+    // Only clear queue on successful sync
+    await clearQueue();
+    return { flushed: ops.length, data };
+  } catch (err: any) {
+    console.error("Sync error:", err);
+    return { flushed: 0, error: err.message, failed: true };
   }
-  const data = await res.json();
-  // Simplify: on success, clear queue; server is idempotent by clientId.
-  await clearQueue();
-  return { flushed: ops.length, data };
 }
