@@ -8,6 +8,30 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
+    // Prevent scrolling while splash is shown
+    if (showSplash) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+    } else {
+      // Restore scrolling when splash is hidden
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    }
+
+    return () => {
+      // Cleanup: ensure scrolling is always restored
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    };
+  }, [showSplash]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 2500); // Show splash for 2.5 seconds
@@ -16,7 +40,13 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={() => {
+        // Double-check that scrolling is restored after animation
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.height = '';
+      }}>
         {showSplash && (
           <motion.div
             initial={{ opacity: 1 }}

@@ -14,8 +14,8 @@ export function AppLayout({
   userEmail?: string | null;
 }) {
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-2xl backdrop-saturate-150 shadow-lg shadow-primary/5">
+    <div className="min-h-screen bg-background text-foreground transition-colors duration-300" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-2xl backdrop-saturate-150 shadow-lg shadow-primary/5" style={{ WebkitTransform: 'translateZ(0)' }}>
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <motion.div 
             className="flex items-center gap-3"
