@@ -58,3 +58,55 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(request).then((cached) => cached || caches.match("/offline")))
   );
 });
+
+// Background Sync for offline transactions
+self.addEventListener("sync", (event) => {
+  if (event.tag === "sync-transactions") {
+    event.waitUntil(syncTransactions());
+  }
+});
+
+async function syncTransactions() {
+  try {
+    // Import IDB helper to access queued operations
+    const { openDB } = await import("idb");
+    const db = await openDB("expenser-offline", 1);
+
+    const queuedOps = await db.getAll("queue");
+
+    if (queuedOps.length === 0) {
+      return;
+    }
+
+    const response = await fetch("/api/sync/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ items: queuedOps }),
+    });
+
+    if (response.ok) {
+      // Clear the queue on success
+      await db.clear("queue");
+
+      // Notify all clients about successful sync
+      const clients = await self.clients.matchAll();
+      clients.forEach((client) => {
+        client.postMessage({
+          type: "SYNC_COMPLETE",
+          count: queuedOps.length,
+        });
+      });
+    }
+  } catch (error) {
+    console.error("Background sync failed:", error);
+    throw error; // Re-throw to let browser retry
+  }
+}
+
+// Periodic Background Sync (if supported)
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "sync-transactions-periodic") {
+    event.waitUntil(syncTransactions());
+  }
+});

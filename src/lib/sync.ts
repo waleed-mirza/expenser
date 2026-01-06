@@ -21,6 +21,7 @@ export async function enqueueTransaction(userId: string, payload: any) {
   const record = {
     ...payload,
     clientId,
+
     userId,
     clientUpdatedAt,
     status: "queued",
@@ -34,6 +35,20 @@ export async function enqueueTransaction(userId: string, payload: any) {
     userId,
     clientUpdatedAt,
   });
+
+  // Register background sync if service worker is available
+  if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if ("sync" in registration) {
+        // @ts-expect-error - Background Sync API
+        await registration.sync.register("sync-transactions");
+      }
+    } catch (err) {
+      console.warn("Background sync registration failed:", err);
+    }
+  }
+
   return clientId;
 }
 

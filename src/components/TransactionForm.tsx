@@ -76,6 +76,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
 
     try {
       await enqueueTransaction(effectiveUserId, payload);
+
       if (isOnline) {
         const res = await fetch("/api/transactions", {
           method: "POST",
@@ -85,10 +86,23 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
         });
 
         if (!res.ok) {
-          console.error("Failed to save transaction:", await res.text());
+          const errorText = await res.text();
+          console.error("Failed to save transaction:", errorText);
+
+          // Show user-friendly error but don't prevent form clear
+          setError("Saved locally. Will sync when connection is stable.");
+
+          // Clear error after 5 seconds
+          setTimeout(() => setError(null), 5000);
         }
 
-        await flushQueue();
+        // Try to flush queue, but don't block on failure
+        try {
+          await flushQueue();
+        } catch (flushErr) {
+          console.error("Failed to flush queue:", flushErr);
+          // Queue will be retried by SyncStatus component
+        }
       }
 
       setAmount("");
@@ -96,7 +110,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       onSaved?.();
     } catch (err) {
       console.error("Error saving transaction:", err);
-      setError("Failed to save transaction. Please try again.");
+      setError("Failed to save transaction locally. Please try again.");
     } finally {
       setLoading(false);
     }
