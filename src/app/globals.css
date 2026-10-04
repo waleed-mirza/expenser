@@ -1,160 +1,166 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Values are full colors (not HSL triplets) so `@theme inline`
+ * can reference them directly. Every text/background pair below is >= 4.5:1,
+ * every input border against its surface is >= 3:1 (WCAG AA).
+ */
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  
+
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  
+  --color-primary-soft: var(--primary-soft);
+
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
+  --color-destructive-soft: var(--destructive-soft);
 
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
-  
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
 
-  @keyframes accordion-down {
-    from { height: 0; }
-    to { height: var(--radix-accordion-content-height); }
-  }
-  @keyframes accordion-up {
-    from { height: var(--radix-accordion-content-height); }
-    to { height: 0; }
-  }
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
 }
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 5.9% 10%;
-  --radius: 1rem;
+  color-scheme: light;
+  --background: #f4f5f7;
+  --foreground: #11151c;
+  --card: #ffffff;
+  --muted: #eceef2;
+  --muted-foreground: #4f5967;
+  --border: #dde1e7;
+  --input: #8b95a3;
+  --ring: #4338ca;
+
+  --primary: #4338ca;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e9e8fd;
+
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #fdeceb;
+
+  --success: #067647;
+  --success-soft: #e6f6ee;
+
+  --warning: #93370d;
+  --warning-soft: #fdf1dc;
 }
 
 .dark {
-  --background: 224 71% 4%;
-  --foreground: 213 31% 91%;
-  --card: 224 71% 4%;
-  --card-foreground: 213 31% 91%;
-  --popover: 224 71% 4%;
-  --popover-foreground: 213 31% 91%;
-  --primary: 263 70% 58%;
-  --primary-foreground: 210 20% 98%;
-  --secondary: 215 27.9% 16.9%;
-  --secondary-foreground: 213 31% 91%;
-  --muted: 215 27.9% 16.9%;
-  --muted-foreground: 217.9 10.6% 64.9%;
-  --accent: 215 27.9% 16.9%;
-  --accent-foreground: 213 31% 91%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 20% 98%;
-  --border: 215 27.9% 16.9%;
-  --input: 215 27.9% 16.9%;
-  --ring: 263 70% 58%;
+  color-scheme: dark;
+  --background: #0a0c10;
+  --foreground: #eef0f4;
+  --card: #14181f;
+  --muted: #1e242e;
+  --muted-foreground: #a3adbb;
+  --border: #262d38;
+  --input: #5f6b7d;
+  --ring: #818cf8;
+
+  --primary: #818cf8;
+  --primary-foreground: #0a0c10;
+  --primary-soft: #1f2347;
+
+  --destructive: #f97066;
+  --destructive-foreground: #0a0c10;
+  --destructive-soft: #3a1a1a;
+
+  --success: #3ddc97;
+  --success-soft: #12301f;
+
+  --warning: #fbbf24;
+  --warning-soft: #33290f;
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
   html {
-    /* Ensure proper touch scrolling on mobile */
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y pan-x;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
   }
+
   body {
     @apply bg-background text-foreground antialiased;
-    background-image:
-      radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.1) 0px, transparent 50%),
-      radial-gradient(at 0% 100%, rgba(251, 146, 60, 0.1) 0px, transparent 50%);
-    /* Prevent mobile scroll issues */
     overscroll-behavior-y: contain;
   }
+
+  /* Locks page scroll behind an open bottom sheet. */
+  body:has(dialog[open]) {
+    overflow: hidden;
+  }
+
+  /* 16px minimum stops iOS Safari zooming the page when a field is focused. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  a,
+  button,
+  label,
+  input,
+  select {
+    touch-action: manipulation;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
   }
-  50% {
-    transform: translateY(-10px);
+  to {
+    transform: none;
   }
 }
 
-@keyframes glow {
-  0%, 100% {
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
     opacity: 1;
   }
-  50% {
-    opacity: 0.8;
-  }
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
+dialog.sheet[open] {
+  animation: sheet-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.animate-float {
-  animation: float 6s ease-in-out infinite;
+dialog.sheet::backdrop {
+  background: rgb(0 0 0 / 0.55);
 }
 
-.animate-glow {
-  animation: glow 2s ease-in-out infinite;
-}
-
-.animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.1),
-    transparent
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 3s infinite;
+dialog.sheet[open]::backdrop {
+  animation: fade-in 0.2s ease-out;
 }

@@ -5,6 +5,7 @@ import {
   type QueuePayload,
   saveTransactionLocal,
   markTransactionDeleted,
+  markTransactionsSynced,
 } from "@/lib/idb";
 import { v4 as uuid } from "uuid";
 
@@ -15,6 +16,30 @@ export type SyncPayload = {
   payload: QueuePayload;
   clientUpdatedAt: string;
 };
+
+/** Fired when something is added to the local queue (saved/edited/deleted). */
+export const QUEUE_CHANGED_EVENT = "expenser:queue-changed";
+/** Fired after a flush succeeded: the server now has the queued changes. */
+export const SYNCED_EVENT = "expenser:synced";
+
+function emit(name: string) {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(name));
+}
+
+/** Best-effort: ask the service worker to flush later if the page is closed. */
+function registerBackgroundSync() {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+  // `ready` never resolves when no worker is registered (e.g. in dev), so this
+  // must never be awaited by callers.
+  navigator.serviceWorker.ready
+    .then((registration) => {
+      if ("sync" in registration) {
+        // @ts-expect-error - Background Sync API
+        return registration.sync.register("sync-transactions");
+      }
+    })
+    .catch((err) => console.warn("Background sync registration failed:", err));
+}
 
 export async function enqueueTransaction(
   userId: string,
@@ -40,18 +65,8 @@ export async function enqueueTransaction(
     clientUpdatedAt,
   });
 
-  // Register background sync if service worker is available
-  if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      if ("sync" in registration) {
-        // @ts-expect-error - Background Sync API
-        await registration.sync.register("sync-transactions");
-      }
-    } catch (err) {
-      console.warn("Background sync registration failed:", err);
-    }
-  }
+  emit(QUEUE_CHANGED_EVENT);
+  registerBackgroundSync();
 
   return clientId;
 }
@@ -71,6 +86,10 @@ export async function enqueueTransactionDelete(
     userId,
     clientUpdatedAt: timestamp,
   });
+
+  emit(QUEUE_CHANGED_EVENT);
+  registerBackgroundSync();
+
   return clientId;
 }
 
@@ -98,6 +117,8 @@ export async function flushQueue() {
     const data = await res.json();
     // Remove only what was sent, so ops queued meanwhile (or beyond the batch limit) survive
     await removeQueuedOps(ops.map((op) => op.id));
+    await markTransactionsSynced(ops.map((op) => op.clientId)).catch(() => null);
+    emit(SYNCED_EVENT);
     return { flushed: ops.length, data };
   } catch (err) {
     console.error("Sync error:", err);

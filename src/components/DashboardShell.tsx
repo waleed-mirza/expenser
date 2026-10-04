@@ -1,49 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { TransactionForm } from "@/components/TransactionForm";
 import { TransactionList } from "@/components/TransactionList";
-import { SyncStatus } from "@/components/SyncStatus";
+import { SpendOverview } from "@/components/SpendOverview";
+import { QuickRepeat } from "@/components/QuickRepeat";
 
-export function DashboardShell({
-  userId,
-}: {
-  userId?: string | null;
-  userEmail?: string | null; // We can remove this from props if unused
-}) {
-  const [refreshToken, setRefreshToken] = useState(0);
-
-  const handleSaved = () => setRefreshToken((n) => n + 1);
+/** Home: glanceable totals, one-tap repeats, quick add, then the latest entries. */
+export function DashboardShell({ userId }: { userId?: string | null }) {
+  const id = userId ?? undefined;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-12">
-      {/* Left Column: Quick Actions & Status */}
-      <div className="lg:col-span-4 space-y-6 h-fit">
-        <SyncStatus />
-        <div className="rounded-2xl border-2 border-border/50 bg-card/80 backdrop-blur-sm p-6 shadow-xl transition-all overflow-hidden">
-          <h2 className="mb-5 text-xl font-bold text-foreground">
-            Quick Add
-          </h2>
-          <TransactionForm onSaved={handleSaved} />
-        </div>
-      </div>
+    <div className="space-y-5">
+      <SpendOverview userId={id} />
+      <QuickRepeat userId={id} />
+      <TransactionForm />
 
-      {/* Right Column: Transactions List */}
-      <div className="lg:col-span-8">
-        <div className="rounded-2xl border-2 border-border/50 bg-card/80 backdrop-blur-sm shadow-xl overflow-hidden">
-          <div className="border-b border-border/50 bg-card/90 p-6">
-            <h2 className="text-xl font-bold text-foreground">
-              Recent Transactions
-            </h2>
-          </div>
-          <div className="p-6">
-            <TransactionList
-              userId={userId ?? undefined}
-              refreshToken={refreshToken}
-            />
-          </div>
+      <section aria-label="Recent expenses" className="space-y-2">
+        <div className="flex items-baseline justify-between px-1">
+          <h2 className="text-lg font-bold">Recent</h2>
+          <Link
+            href="/transactions"
+            className="-my-2 py-2 text-sm font-semibold text-primary underline-offset-2 hover:underline"
+          >
+            See all
+          </Link>
         </div>
-      </div>
+        <TransactionList userId={id} compact />
+      </section>
     </div>
   );
 }

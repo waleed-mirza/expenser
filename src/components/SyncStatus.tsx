@@ -1,196 +1,149 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { flushQueue } from "@/lib/sync";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, CloudUpload, RefreshCw, WifiOff } from "lucide-react";
+import { flushQueue, QUEUE_CHANGED_EVENT } from "@/lib/sync";
 import { getQueuedOps } from "@/lib/idb";
-import { Wifi, WifiOff, CloudCog, RefreshCw } from "lucide-react";
+import { useOnline } from "@/hooks/useOnline";
+import { cn } from "@/lib/utils";
 
+const MAX_BACKOFF_MS = 60_000;
+
+/**
+ * Header pill that shows connection / sync state and is also the app's single
+ * sync engine: it flushes the offline queue whenever something is queued, the
+ * device comes back online, or after a failure (exponential backoff).
+ */
 export function SyncStatus() {
-  const [online, setOnline] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
+  const online = useOnline();
+  const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
-
-  // Check pending operations count
-  const checkPendingOps = async () => {
-    try {
-      const ops = await getQueuedOps();
-      setPendingCount(ops.length);
-    } catch (err) {
-      console.error("Failed to check pending ops:", err);
-    }
-  };
+  const [failed, setFailed] = useState(false);
+  const syncRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handler = () => setOnline(navigator.onLine);
-    setOnline(navigator.onLine);
-    setHydrated(true);
-    window.addEventListener("online", handler);
-    window.addEventListener("offline", handler);
+    let cancelled = false;
+    let running = false;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    // Initial check for pending operations
-    checkPendingOps();
+    const refreshPending = async () => {
+      try {
+        const ops = await getQueuedOps(500);
+        if (!cancelled) setPending(ops.length);
+      } catch {
+        // IndexedDB unavailable; leave the count as is.
+      }
+    };
+
+    const sync = async () => {
+      if (running || !navigator.onLine) return;
+      running = true;
+      clearTimeout(timer);
+      try {
+        // Drain in a few rounds in case more was queued while flushing.
+        for (let round = 0; round < 5; round++) {
+          const next = await getQueuedOps(1);
+          if (!next.length) {
+            failures = 0;
+            if (!cancelled) setFailed(false);
+            break;
+          }
+          if (!cancelled) setSyncing(true);
+          const res = await flushQueue();
+          if (res.failed) {
+            failures += 1;
+            if (!cancelled) setFailed(true);
+            timer = setTimeout(
+              sync,
+              Math.min(2000 * 2 ** failures, MAX_BACKOFF_MS)
+            );
+            break;
+          }
+          failures = 0;
+          if (!cancelled) setFailed(false);
+        }
+      } finally {
+        running = false;
+        if (!cancelled) setSyncing(false);
+        await refreshPending();
+      }
+    };
+
+    syncRef.current = sync;
+
+    const onQueued = () => {
+      void refreshPending();
+      void sync();
+    };
+    const onOnline = () => void sync();
+
+    window.addEventListener(QUEUE_CHANGED_EVENT, onQueued);
+    window.addEventListener("online", onOnline);
+    void refreshPending();
+    void sync();
 
     return () => {
-      window.removeEventListener("online", handler);
-      window.removeEventListener("offline", handler);
+      cancelled = true;
+      clearTimeout(timer);
+      window.removeEventListener(QUEUE_CHANGED_EVENT, onQueued);
+      window.removeEventListener("online", onOnline);
     };
   }, []);
 
-  // Update pending count when offline
-  useEffect(() => {
-    if (!online) {
-      checkPendingOps();
-      // Check periodically while offline to update count
-      const interval = setInterval(checkPendingOps, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [online]);
+  const state = !online
+    ? "offline"
+    : failed
+    ? "failed"
+    : syncing
+    ? "syncing"
+    : pending > 0
+    ? "pending"
+    : "synced";
 
-  // Sync with retry mechanism when online
-  useEffect(() => {
-    if (!online) return;
+  const view = {
+    offline: {
+      label: pending > 0 ? `Offline · ${pending} saved` : "Offline",
+      icon: <WifiOff className="h-4 w-4" aria-hidden />,
+      tone: "border-warning/30 bg-warning-soft text-warning",
+    },
+    failed: {
+      label: "Sync failed · Retry",
+      icon: <AlertTriangle className="h-4 w-4" aria-hidden />,
+      tone: "border-destructive/30 bg-destructive-soft text-destructive",
+    },
+    syncing: {
+      label: "Syncing…",
+      icon: <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />,
+      tone: "border-primary/30 bg-primary-soft text-primary",
+    },
+    pending: {
+      label: `${pending} to sync`,
+      icon: <CloudUpload className="h-4 w-4" aria-hidden />,
+      tone: "border-warning/30 bg-warning-soft text-warning",
+    },
+    synced: {
+      label: "Synced",
+      icon: <CheckCircle2 className="h-4 w-4" aria-hidden />,
+      tone: "border-transparent bg-transparent text-muted-foreground",
+    },
+  }[state];
 
-    let mounted = true;
-    let syncInterval: NodeJS.Timeout | null = null;
-    let messageTimeout: NodeJS.Timeout | null = null;
-    let retryCount = 0;
-    const MAX_RETRIES = 5;
-
-    const attemptSync = async () => {
-      if (!mounted || !navigator.onLine) return;
-
-      // Check if there are pending operations
-      const ops = await getQueuedOps();
-      if (ops.length === 0) {
-        setPendingCount(0);
-        return;
-      }
-
-      setSyncing(true);
-      const res = await flushQueue();
-      setSyncing(false);
-
-      if (!mounted) return;
-
-      if (res.failed) {
-        retryCount++;
-        const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 60000); // Exponential backoff, max 60s
-
-        setSyncError(
-          `Sync failed. Retrying in ${Math.round(retryDelay / 1000)}s... (${retryCount}/${MAX_RETRIES})`
-        );
-
-        if (retryCount < MAX_RETRIES) {
-          messageTimeout = setTimeout(() => {
-            if (mounted) setSyncError(null);
-          }, retryDelay);
-
-          // Schedule retry
-          syncInterval = setTimeout(attemptSync, retryDelay);
-        } else {
-          setSyncError("Sync failed after multiple attempts. Will retry periodically.");
-          messageTimeout = setTimeout(() => {
-            if (mounted) {
-              setSyncError(null);
-              retryCount = 0; // Reset retry count
-            }
-          }, 10000);
-
-          // Continue periodic retry every 60 seconds
-          syncInterval = setTimeout(attemptSync, 60000);
-        }
-      } else if (res.flushed) {
-        retryCount = 0; // Reset on success
-        setMessage(`Synced ${res.flushed} pending item(s)`);
-        setSyncError(null);
-        setPendingCount(0);
-
-        messageTimeout = setTimeout(() => {
-          if (mounted) setMessage(null);
-        }, 3000);
-
-        // Check again after a short delay in case more items were added
-        syncInterval = setTimeout(attemptSync, 5000);
-      } else {
-        // No items to sync
-        setPendingCount(0);
-      }
-    };
-
-    // Start initial sync
-    attemptSync();
-
-    return () => {
-      mounted = false;
-      if (syncInterval) clearTimeout(syncInterval);
-      if (messageTimeout) clearTimeout(messageTimeout);
-    };
-  }, [online]);
+  const actionable = state === "failed" || state === "pending";
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border-2 border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-lg">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-foreground">Connection Status</h3>
-        <div
-          className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold shadow-md transition-all ${
-            !hydrated
-              ? "bg-muted text-muted-foreground"
-              : online
-              ? "bg-gradient-to-r from-emerald-500 to-green-500 text-white"
-              : "bg-gradient-to-r from-amber-500 to-orange-500 text-white"
-          }`}
-        >
-          {!hydrated ? (
-            <CloudCog className="h-4 w-4 animate-pulse" />
-          ) : online ? (
-            syncing ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Wifi className="h-4 w-4" />
-            )
-          ) : (
-            <WifiOff className="h-4 w-4" />
-          )}
-          <span>
-            {!hydrated
-              ? "Checking..."
-              : online
-              ? syncing
-                ? "Syncing..."
-                : "Online"
-              : "Offline"}
-          </span>
-        </div>
-      </div>
-
-      {pendingCount > 0 && (
-        <div className="rounded-xl bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 px-4 py-2.5 text-xs font-semibold text-blue-400 backdrop-blur-sm flex items-center justify-between">
-          <span>{pendingCount} transaction{pendingCount > 1 ? 's' : ''} pending sync</span>
-          {syncing && <RefreshCw className="h-3 w-3 animate-spin" />}
-        </div>
+    <button
+      type="button"
+      onClick={() => void syncRef.current()}
+      disabled={!actionable}
+      aria-live="polite"
+      className={cn(
+        "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium disabled:pointer-events-none",
+        view.tone
       )}
-
-      {message && (
-        <div className="rounded-xl bg-gradient-to-r from-primary/20 to-purple-500/20 border border-primary/30 px-4 py-2.5 text-xs font-semibold text-primary backdrop-blur-sm animate-pulse">
-          {message}
-        </div>
-      )}
-
-      {syncError && (
-        <div className="rounded-xl bg-gradient-to-r from-destructive/20 to-red-500/20 border border-destructive/30 px-4 py-2.5 text-xs font-semibold text-destructive backdrop-blur-sm">
-          {syncError}
-        </div>
-      )}
-
-      {!online && (
-        <p className="text-xs font-medium text-muted-foreground bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-          Changes will be saved locally and synced when connection is restored.
-        </p>
-      )}
-    </div>
+    >
+      {view.icon}
+      {view.label}
+    </button>
   );
 }

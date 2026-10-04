@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { Loader2, Mail, Lock, User, DollarSign, Globe, ArrowRight, Sparkles } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import { AuthShell } from "@/components/AuthShell";
+import { PasswordInput } from "@/components/PasswordInput";
+import { Button } from "@/components/ui/button";
+import { Field, Notice, inputClass } from "@/components/ui/field";
 
 const DEFAULT_TIMEZONE = "Asia/Karachi";
 const noopSubscribe = () => () => {};
@@ -41,241 +44,129 @@ export default function SignUpPage() {
     setMessage(null);
     setError(null);
     setLoading(true);
-    const res = await fetch("/api/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, currency, timezone }),
-    });
-    setLoading(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "Failed to sign up");
-      return;
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name, currency, timezone }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? "Couldn't create the account.");
+        setLoading(false);
+        return;
+      }
+      setMessage("Account created. Taking you to sign in…");
+      setTimeout(() => router.push("/signin"), 800);
+    } catch {
+      setError(
+        navigator.onLine
+          ? "Something went wrong. Please try again."
+          : "You're offline. Connect to create an account."
+      );
+      setLoading(false);
     }
-    setMessage("Account created. Redirecting to sign in...");
-    setTimeout(() => router.push("/signin"), 800);
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4 relative overflow-hidden py-12">
-      {/* Animated Background */}
-      <div className="absolute inset-0">
-        <motion.div
-          className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"
-          animate={{
-            x: [0, 100, 0],
-            y: [0, 50, 0],
-            scale: [1, 1.2, 1],
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        />
-        <motion.div
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl"
-          animate={{
-            x: [0, -100, 0],
-            y: [0, -50, 0],
-            scale: [1, 1.2, 1],
-          }}
-          transition={{
-            duration: 25,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        />
-      </div>
+    <AuthShell title="Create your account" subtitle="Takes under a minute.">
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <Field label="Email" htmlFor="email">
+          <input
+            id="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="off"
+            spellCheck={false}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className={inputClass}
+          />
+        </Field>
+        <Field label="Password" htmlFor="password" hint="At least 6 characters.">
+          <PasswordInput
+            id="password"
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            minLength={6}
+          />
+        </Field>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md relative z-10"
-      >
-        <div className="rounded-3xl bg-card/60 backdrop-blur-2xl border-2 border-border/50 p-8 shadow-2xl">
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="mb-8"
-          >
-            <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-foreground via-purple-400 to-pink-400 bg-clip-text text-transparent flex items-center gap-2">
-              Create your account
-              <motion.span
-                animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
+        <details className="group rounded-xl border border-border bg-card">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-base font-semibold [&::-webkit-details-marker]:hidden">
+            <span>
+              More options{" "}
+              <span className="font-normal text-muted-foreground">
+                · {currency}, {timezone}
+              </span>
+            </span>
+            <ChevronDown
+              className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <div className="space-y-4 border-t border-border p-4">
+            <Field label="Name (optional)" htmlFor="name">
+              <input
+                id="name"
+                value={name}
+                autoComplete="name"
+                onChange={(e) => setName(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Currency" htmlFor="currency">
+              <select
+                id="currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className={inputClass}
               >
-                <Sparkles className="h-6 w-6 text-primary" />
-              </motion.span>
-            </h1>
-            <p className="text-muted-foreground">Join Expenser and start tracking your expenses</p>
-          </motion.div>
-
-          <form className="space-y-4" onSubmit={onSubmit}>
-            <motion.label
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="block text-sm font-semibold"
+                {currencies.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Time zone"
+              htmlFor="timezone"
+              hint="Decides where each day and week starts."
             >
-              Name (Optional)
-              <div className="relative mt-2">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
-                  className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm pl-10 pr-4 py-3 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
-                />
-              </div>
-            </motion.label>
+              <input
+                id="timezone"
+                value={timezone}
+                autoCapitalize="off"
+                spellCheck={false}
+                onChange={(e) => setTimezoneChoice(e.target.value)}
+                required
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </details>
 
-            <motion.label
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="block text-sm font-semibold"
-            >
-              Email
-              <div className="relative mt-2">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
-                  className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm pl-10 pr-4 py-3 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="you@example.com"
-                />
-              </div>
-            </motion.label>
+        {message && <Notice tone="success">{message}</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
 
-            <motion.label
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-              className="block text-sm font-semibold"
-            >
-              Password
-              <div className="relative mt-2">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
-                  className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm pl-10 pr-4 py-3 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  placeholder="••••••••"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">At least 6 characters</p>
-            </motion.label>
+        <Button type="submit" size="lg" loading={loading} className="w-full">
+          {loading ? "Creating account…" : "Create account"}
+        </Button>
+      </form>
 
-            <motion.label
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.5 }}
-              className="block text-sm font-semibold"
-            >
-              Preferred currency
-              <div className="relative mt-2">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <select
-                  className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm pl-10 pr-4 py-3 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all appearance-none"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                >
-                  {currencies.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </motion.label>
-
-            <motion.label
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.6 }}
-              className="block text-sm font-semibold"
-            >
-              Timezone
-              <div className="relative mt-2">
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
-                  className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm pl-10 pr-4 py-3 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  value={timezone}
-                  onChange={(e) => setTimezoneChoice(e.target.value)}
-                  required
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">For day/week rollovers</p>
-            </motion.label>
-
-            {message && (
-              <motion.p
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-sm font-medium text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-2"
-              >
-                {message}
-              </motion.p>
-            )}
-            {error && (
-              <motion.p
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-sm font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-2"
-              >
-                {error}
-              </motion.p>
-            )}
-
-            <motion.button
-              type="submit"
-              disabled={loading}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7 }}
-              whileHover={{ scale: loading ? 1 : 1.01 }}
-              whileTap={{ scale: loading ? 1 : 0.99 }}
-              className="w-full rounded-xl bg-primary py-3.5 font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                <>
-                  Create Account
-                  <ArrowRight className="h-5 w-5" />
-                </>
-              )}
-            </motion.button>
-          </form>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="mt-6 text-center text-sm text-muted-foreground"
-          >
-            Already have an account?{" "}
-            <Link
-              className="font-semibold text-primary hover:text-primary/80 transition-colors inline-flex items-center gap-1"
-              href="/signin"
-            >
-              Sign in
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </motion.p>
-        </div>
-      </motion.div>
-    </div>
+      <p className="mt-6 text-center text-base text-muted-foreground">
+        Already have an account?{" "}
+        <Link
+          href="/signin"
+          className="inline-block py-2 font-semibold text-primary underline-offset-2 hover:underline"
+        >
+          Sign in
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

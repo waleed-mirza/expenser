@@ -2,63 +2,52 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CreditCard, BarChart3, Settings } from "lucide-react";
-import { clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-import { motion } from "framer-motion";
+import { BarChart3, History, Home, Settings } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const links = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/transactions", label: "Transactions", icon: CreditCard },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
+export const NAV_LINKS = [
+  { href: "/dashboard", label: "Home", title: "Expenser", icon: Home },
+  { href: "/transactions", label: "History", title: "History", icon: History },
+  { href: "/analytics", label: "Insights", title: "Insights", icon: BarChart3 },
+  { href: "/settings", label: "Settings", title: "Settings", icon: Settings },
 ];
 
+/** Thumb-reach tab bar, fixed to the bottom of the viewport. */
 export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center gap-2">
-      {links.map((link, index) => {
-        const Icon = link.icon;
-        const isActive = pathname === link.href;
-        return (
-          <motion.div
-            key={link.href}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1, duration: 0.3 }}
-          >
-            <Link
-              href={link.href}
-              className={twMerge(
-                clsx(
-                  "relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-gradient-to-r from-primary to-purple-600 text-primary-foreground shadow-lg shadow-primary/30"
-                    : "text-muted-foreground hover:text-foreground hover:bg-card/60 backdrop-blur-sm"
-                )
-              )}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary to-purple-600 -z-10"
-                  initial={false}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                />
-              )}
-              <Icon
-                className={clsx(
-                  "h-4 w-4 transition-transform",
-                  isActive && "scale-110"
+    <nav
+      aria-label="Primary"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]"
+    >
+      <ul className="mx-auto grid max-w-xl grid-cols-4">
+        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+          const active = pathname === href || pathname.startsWith(`${href}/`);
+          return (
+            <li key={href}>
+              <Link
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex h-16 flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors",
+                  active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 )}
-              />
-              <span className="hidden sm:inline-block">{link.label}</span>
-            </Link>
-          </motion.div>
-        );
-      })}
+              >
+                <span
+                  className={cn(
+                    "flex h-8 w-14 items-center justify-center rounded-full transition-colors",
+                    active && "bg-primary-soft"
+                  )}
+                >
+                  <Icon className="h-6 w-6" strokeWidth={active ? 2.5 : 2} aria-hidden />
+                </span>
+                {label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </nav>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -10,89 +10,125 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { motion } from "framer-motion";
+import { formatCompact, formatMoney } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type WeeklyRow = {
   week_start: string;
   expense_cents?: number | string;
 };
 
+const weekLabel = (iso: string, long = false) =>
+  // week_start is a wall-clock value labelled UTC, so format it as UTC.
+  new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+    ...(long ? { year: "numeric" } : {}),
+  });
+
 export function AnalyticsCharts({
-  start,
-  end,
+  startISO,
+  endISO,
+  tz,
 }: {
-  start: string;
-  end: string;
+  startISO: string;
+  endISO: string;
+  tz: string;
 }) {
-  const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
+  const [weekly, setWeekly] = useState<WeeklyRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    const qs = new URLSearchParams({
-      tz: "Asia/Karachi",
-      start: new Date(start).toISOString(),
-      end: new Date(end).toISOString(),
-    });
-    fetch(`/api/analytics/weekly?${qs.toString()}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setWeekly(data?.weeks ?? []))
-      .catch(() => setWeekly([]));
-  }, [start, end]);
+    const ctrl = new AbortController();
+    const qs = new URLSearchParams({ tz, start: startISO, end: endISO });
+    fetch(`/api/analytics/weekly?${qs}`, { signal: ctrl.signal, credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("network"))))
+      .then((data) => {
+        setWeekly(data?.weeks ?? []);
+        setFailed(false);
+      })
+      .catch(() => {
+        if (ctrl.signal.aborted) return;
+        setWeekly([]);
+        setFailed(true);
+      });
+    return () => ctrl.abort();
+  }, [startISO, endISO, tz]);
+
+  const data = useMemo(
+    () =>
+      (weekly ?? []).map((w) => ({
+        start: w.week_start,
+        label: weekLabel(w.week_start),
+        cents: Number(w.expense_cents || 0),
+      })),
+    [weekly]
+  );
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        whileHover={{ scale: 1.02 }}
-        className="rounded-2xl border-2 border-border/50 bg-card/40 backdrop-blur-sm p-6 shadow-lg"
-      >
-        <h3 className="text-base font-bold text-foreground mb-4">
-          Weekly totals (PKR)
-        </h3>
-        <div className="h-64">
+    <section
+      aria-label="Weekly totals"
+      className="rounded-2xl border border-border bg-card p-4"
+    >
+      <h2 className="mb-3 text-base font-bold">Weekly totals</h2>
+      {weekly === null ? (
+        <Skeleton className="h-56 w-full" />
+      ) : failed ? (
+        <p className="py-16 text-center text-sm text-muted-foreground">
+          Couldn&apos;t load the chart.
+        </p>
+      ) : data.length === 0 ? (
+        <p className="py-16 text-center text-sm text-muted-foreground">
+          No expenses in this range.
+        </p>
+      ) : (
+        <div className="h-56" role="img" aria-label={`Bar chart of ${data.length} weekly totals`}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weekly}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+            <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
+              <CartesianGrid vertical={false} stroke="var(--border)" />
               <XAxis
-                dataKey={(d) =>
-                  new Date(d.week_start).toLocaleDateString("en-PK", {
-                    month: "short",
-                    day: "numeric",
-                  })
-                }
-                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                stroke="hsl(var(--border))"
+                dataKey="label"
+                tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                tickFormatter={(v) => `${(v / 100).toFixed(0)}`}
-                stroke="hsl(var(--border))"
+                tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+                tickFormatter={(v) => formatCompact(Number(v))}
+                tickLine={false}
+                axisLine={false}
+                width={48}
               />
               <Tooltip
-                formatter={(v: number) => `${(Number(v) / 100).toFixed(2)} PKR`}
+                cursor={{ fill: "var(--muted)" }}
+                formatter={(v) => [formatMoney(Number(v)), "Spent"]}
+                labelFormatter={(_, payload) =>
+                  payload?.[0]
+                    ? `Week of ${weekLabel(payload[0].payload.start, true)}`
+                    : ""
+                }
                 contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
                   borderRadius: "0.75rem",
+                  color: "var(--foreground)",
                 }}
+                labelStyle={{ color: "var(--muted-foreground)" }}
+                itemStyle={{ color: "var(--foreground)" }}
               />
               <Bar
-                dataKey={(d) => Number(d.expense_cents || 0)}
-                name="Expenses"
-                fill="url(#colorGradient)"
-                radius={[8, 8, 0, 0]}
+                dataKey="cents"
+                name="Spent"
+                fill="var(--primary)"
+                radius={[6, 6, 0, 0]}
+                maxBarSize={36}
               />
-              <defs>
-                <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--primary))" />
-                  <stop offset="100%" stopColor="rgb(139, 92, 246)" />
-                </linearGradient>
-              </defs>
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </motion.div>
-    </div>
+      )}
+    </section>
   );
 }

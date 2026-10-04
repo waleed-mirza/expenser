@@ -1,4 +1,10 @@
-import { endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
+import {
+  endOfDay,
+  endOfWeek,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
 import { utcToZonedTime, zonedTimeToUtc } from "date-fns-tz";
 
 export const DEFAULT_TZ = "Asia/Karachi";
@@ -17,6 +23,16 @@ export function dayRange(date: Date, tz: string = DEFAULT_TZ) {
   const start = startOfDay(zoned);
   const end = endOfDay(zoned);
   return { start, end };
+}
+
+/** UTC instants at which the current day / Monday-based week / month began in `tz`. */
+export function periodStarts(now: Date, tz: string = DEFAULT_TZ) {
+  const zoned = toZoned(now, tz);
+  return {
+    day: toUtc(startOfDay(zoned), tz),
+    week: toUtc(startOfWeek(zoned, { weekStartsOn: 1 }), tz),
+    month: toUtc(startOfMonth(zoned), tz),
+  };
 }
 
 export function weekRange(anchor: Date, tz: string = DEFAULT_TZ) {

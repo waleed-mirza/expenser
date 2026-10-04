@@ -72,20 +72,66 @@ export async function saveTransactionLocal(value: LocalTransaction) {
 }
 
 
+/** The user's non-deleted local transactions, newest (by occurredAt) first. */
 export async function getTransactionsLocal(userId: string, limit = 50) {
   const db = await getDb();
-  const tx = db.transaction("transactions", "readonly");
-  const index = tx.objectStore("transactions").index("userId");
+  const all = await db.getAllFromIndex("transactions", "userId", userId);
+  return all
+    .filter((t) => !t.isDeleted && typeof t.occurredAt === "string")
+    .sort((a, b) => (b.occurredAt ?? "").localeCompare(a.occurredAt ?? ""))
+    .slice(0, limit);
+}
 
-  const results: LocalTransaction[] = [];
-  let cursor = await index.openCursor(IDBKeyRange.only(userId), "prev"); // newest first
+/**
+ * Remember server transactions for offline reads. Records with a pending local
+ * change are left alone so unsynced edits are never overwritten.
+ */
+export async function cacheServerTransactions(
+  userId: string,
+  items: {
+    clientId: string;
+    amountCents: number;
+    currencyCode?: string;
+    note?: string | null;
+    occurredAt: string;
+    clientUpdatedAt?: string;
+  }[]
+) {
+  if (!items.length) return;
+  const db = await getDb();
+  const tx = db.transaction("transactions", "readwrite");
+  await Promise.all([
+    ...items.map(async (item) => {
+      const existing = await tx.store.get(item.clientId);
+      if (existing?.status === "queued") return;
+      await tx.store.put({
+        clientId: item.clientId,
+        userId,
+        amountCents: item.amountCents,
+        currencyCode: item.currencyCode,
+        note: item.note ?? null,
+        occurredAt: item.occurredAt,
+        clientUpdatedAt: item.clientUpdatedAt,
+        status: "synced",
+        isDeleted: false,
+      });
+    }),
+    tx.done,
+  ]);
+}
 
-  while (cursor && results.length < limit) {
-    results.push(cursor.value);
-    cursor = await cursor.continue();
-  }
-
-  return results;
+/** Flip local records from "queued" to "synced" once the server accepted them. */
+export async function markTransactionsSynced(clientIds: string[]) {
+  if (!clientIds.length) return;
+  const db = await getDb();
+  const tx = db.transaction("transactions", "readwrite");
+  await Promise.all([
+    ...clientIds.map(async (clientId) => {
+      const existing = await tx.store.get(clientId);
+      if (existing) await tx.store.put({ ...existing, status: "synced" });
+    }),
+    tx.done,
+  ]);
 }
 
 export async function queueOperation(op: {
@@ -144,6 +190,24 @@ export async function removeQueuedOps(ids: number[]) {
   const db = await getDb();
   const tx = db.transaction("queue", "readwrite");
   await Promise.all([...ids.map((id) => tx.store.delete(id)), tx.done]);
+}
+
+/**
+ * Wipe everything this device stores locally (cached expenses, the unsynced
+ * queue, meta) plus cached summaries/suggestions. Never touches the server.
+ * Keeps `lastUserId` (offline saves need it) and the theme preference.
+ */
+export async function clearLocalData() {
+  const db = await getDb();
+  const stores = ["transactions", "categories", "queue", "meta"] as const;
+  const tx = db.transaction([...stores], "readwrite");
+  await Promise.all([...stores.map((name) => tx.objectStore(name).clear()), tx.done]);
+
+  for (const key of Object.keys(localStorage)) {
+    if (key === "expenser:recent-notes" || key.startsWith("expenser:overview:")) {
+      localStorage.removeItem(key);
+    }
+  }
 }
 
 export async function setMeta(key: string, value: unknown) {

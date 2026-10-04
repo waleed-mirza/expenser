@@ -1,13 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
+import {
+  endOfDay,
+  format,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  subDays,
+} from "date-fns";
+import { ArrowDownRight, ArrowUpRight, WifiOff } from "lucide-react";
 import { AnalyticsCharts } from "@/components/AnalyticsCharts";
-import { TrendingUp, TrendingDown, Target, Wallet } from "lucide-react";
-import { motion } from "framer-motion";
-import { format, parseISO } from "date-fns";
+import { Chip } from "@/components/ui/chip";
+import { Button } from "@/components/ui/button";
+import { inputClass } from "@/components/ui/field";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatMoney } from "@/lib/format";
+import { toDateInputValue } from "@/lib/transactions";
+import { DEFAULT_TZ } from "@/lib/time";
 
 type Summary = {
-  range: { start: string; end: string; tz: string };
   expenseCents: number;
   avgDailyExpenseCents: number;
   expenseCount: number;
@@ -17,222 +30,233 @@ type Summary = {
     occurredAt: string;
     currencyCode?: string | null;
   } | null;
-  previous?: {
-    expenseCents: number;
-  };
+  previous?: { expenseCents: number };
   days: number;
 };
 
-export function AnalyticsDashboard() {
-  const [start, setStart] = useState(() =>
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  );
-  const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+type Preset = "7d" | "30d" | "90d" | "month" | "custom";
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Ensure start date is at the beginning of the day (00:00:00)
-      const startDateObj = start ? new Date(start + "T00:00:00") : new Date();
-      // Ensure end date is at the end of the day (23:59:59.999)
-      const endDateObj = end ? new Date(end + "T23:59:59.999") : new Date();
-      
-      const qs = new URLSearchParams({
-        start: startDateObj.toISOString(),
-        end: endDateObj.toISOString(),
-      });
-      const res = await fetch(`/api/analytics/summary?${qs.toString()}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch summary");
-      const json = (await res.json()) as Summary;
-      setSummary(json);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load analytics";
-      setError(message);
-      setSummary(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+const PRESETS: { key: Preset; label: string }[] = [
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "90d", label: "90 days" },
+  { key: "month", label: "This month" },
+  { key: "custom", label: "Custom" },
+];
+
+function presetRange(preset: Preset, customStart: string, customEnd: string) {
+  const now = new Date();
+  switch (preset) {
+    case "7d":
+      return { start: startOfDay(subDays(now, 6)), end: endOfDay(now) };
+    case "90d":
+      return { start: startOfDay(subDays(now, 89)), end: endOfDay(now) };
+    case "month":
+      return { start: startOfMonth(now), end: endOfDay(now) };
+    case "custom":
+      return customStart && customEnd && customStart <= customEnd
+        ? { start: startOfDay(parseISO(customStart)), end: endOfDay(parseISO(customEnd)) }
+        : null;
+    default:
+      return { start: startOfDay(subDays(now, 29)), end: endOfDay(now) };
+  }
+}
+
+export function AnalyticsDashboard() {
+  const { data: session } = useSession();
+  const tz = session?.user?.timezone || DEFAULT_TZ;
+
+  const [preset, setPreset] = useState<Preset>("30d");
+  const [customStart, setCustomStart] = useState(() =>
+    toDateInputValue(subDays(new Date(), 29))
+  );
+  const [customEnd, setCustomEnd] = useState(() => toDateInputValue(new Date()));
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+
+  // Stable ISO strings for the effect/children; `preset` fully determines the range.
+  const range = useMemo(() => {
+    const r = presetRange(preset, customStart, customEnd);
+    return r && { startISO: r.start.toISOString(), endISO: r.end.toISOString() };
+  }, [preset, customStart, customEnd]);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Calculate Insights
-  const total = summary ? summary.expenseCents / 100 : 0;
-  const prevTotal = summary?.previous ? summary.previous.expenseCents / 100 : 0;
-  const percentChange = prevTotal > 0 ? ((total - prevTotal) / prevTotal) * 100 : 0;
-  
-  // Projection (Burn Rate)
-  // Simple projection: (Total / Days passed) * 30 days
-  // Or better, if the range is "This Month", project to end of month.
-  // For simplicity, let's just project based on the current range's daily average extended to 30 days
-  const dailyAvg = summary ? summary.avgDailyExpenseCents / 100 : 0;
-  const projected30Day = dailyAvg * 30;
-
-  const formatDateRange = () => {
-    try {
-      const startFormatted = start ? format(parseISO(start), "MMM d, yyyy") : "";
-      const endFormatted = end ? format(parseISO(end), "MMM d, yyyy") : "";
-      if (startFormatted && endFormatted) {
-        return `${startFormatted} - ${endFormatted}`;
+    if (!range) return;
+    const ctrl = new AbortController();
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams({
+          tz,
+          start: range.startISO,
+          end: range.endISO,
+        });
+        const res = await fetch(`/api/analytics/summary?${qs}`, {
+          credentials: "include",
+          signal: ctrl.signal,
+        });
+        if (!res.ok) throw new Error("network");
+        setSummary((await res.json()) as Summary);
+      } catch {
+        if (ctrl.signal.aborted) return;
+        setSummary(null);
+        setError(
+          navigator.onLine
+            ? "Couldn't load insights. Please try again."
+            : "Insights need a connection. Your expenses are safe on this device."
+        );
+      } finally {
+        if (!ctrl.signal.aborted) setLoading(false);
       }
-      return null;
-    } catch {
-      return null;
-    }
-  };
+    })();
+    return () => ctrl.abort();
+  }, [range, tz, retry]);
 
-  const dateRangeText = formatDateRange();
+  const total = summary?.expenseCents ?? 0;
+  const prev = summary?.previous?.expenseCents ?? 0;
+  const change = prev > 0 ? ((total - prev) / prev) * 100 : null;
+  const dailyAvg = summary?.avgDailyExpenseCents ?? 0;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="space-y-8"
-    >
-      {/* Controls */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="rounded-2xl border-2 border-border/50 bg-card/60 backdrop-blur-xl p-6 shadow-xl"
-      >
-        <div className="flex flex-wrap items-end gap-4 mb-4">
-        <label className="text-sm font-medium text-foreground">
-          Start
-          <input
-            type="date"
-            className="mt-2 block rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm px-4 py-2.5 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-          />
-        </label>
-        <label className="text-sm font-medium text-foreground">
-          End
-          <input
-            type="date"
-            className="mt-2 block rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm px-4 py-2.5 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-          />
-        </label>
-          <motion.button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-colors"
-          >
-            {loading ? "Loading..." : "Apply Range"}
-          </motion.button>
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <div
+          className="-mx-4 flex gap-2 overflow-x-auto px-4"
+          role="group"
+          aria-label="Date range"
+        >
+          {PRESETS.map((p) => (
+            <Chip key={p.key} active={preset === p.key} onClick={() => setPreset(p.key)}>
+              {p.label}
+            </Chip>
+          ))}
         </div>
-        {dateRangeText && (
-          <div className="pt-4 border-t border-border/50">
-            <p className="text-sm text-muted-foreground">
-              {summary ? (
-                <>Showing results for: <span className="font-medium text-foreground">{dateRangeText}</span></>
-              ) : (
-                <>Date range: <span className="font-medium text-foreground">{dateRangeText}</span></>
-              )}
-            </p>
+
+        {preset === "custom" && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="range-from" className="block text-sm font-semibold">
+                From
+              </label>
+              <input
+                id="range-from"
+                type="date"
+                value={customStart}
+                max={customEnd}
+                onChange={(e) => e.target.value && setCustomStart(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="range-to" className="block text-sm font-semibold">
+                To
+              </label>
+              <input
+                id="range-to"
+                type="date"
+                value={customEnd}
+                min={customStart}
+                max={toDateInputValue(new Date())}
+                onChange={(e) => e.target.value && setCustomEnd(e.target.value)}
+                className={inputClass}
+              />
+            </div>
           </div>
         )}
-      </motion.div>
+      </div>
 
-      {error && <div className="text-sm text-destructive font-medium px-1">{error}</div>}
-
-      {summary && (
-        <>
-          {/* Key Metrics Grid */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <InsightCard
-              index={0}
-              title="Total Spent"
-              value={`${total.toLocaleString()} PKR`}
-              subtext={
-                prevTotal > 0 ? (
-                  <span className={percentChange > 0 ? "text-red-500 font-bold" : "text-emerald-500 font-bold"}>
-                     {percentChange > 0 ? "+" : ""}{percentChange.toFixed(1)}% vs previous
-                  </span>
-                ) : "vs previous period"
-              }
-              icon={<Wallet className="h-5 w-5" />}
-            />
-            
-            <InsightCard
-              index={1}
-              title="Daily Average"
-              value={`${dailyAvg.toFixed(2)} PKR`}
-              subtext="Average burn rate"
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
-
-            <InsightCard
-              index={2}
-              title="30-Day Projection"
-              value={`${projected30Day.toLocaleString()} PKR`}
-              subtext="Forecast based on current rate"
-              icon={<Target className="h-5 w-5" />}
-            />
-
-            <InsightCard
-              index={3}
-              title="Largest Expense"
-              value={summary.topExpense ? `${(summary.topExpense.amountCents/100).toLocaleString()} PKR` : "0 PKR"}
-              subtext={summary.topExpense?.note || "No data"}
-              icon={<TrendingDown className="h-5 w-5" />}
-            />
+      {error ? (
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border px-6 py-12 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <WifiOff className="h-6 w-6" aria-hidden />
+          </span>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button variant="secondary" size="sm" onClick={() => setRetry((n) => n + 1)}>
+            Try again
+          </Button>
+        </div>
+      ) : !range ? (
+        <p className="rounded-2xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
+          Pick a start date that is on or before the end date.
+        </p>
+      ) : loading && !summary ? (
+        <div className="space-y-4" aria-busy="true">
+          <Skeleton className="h-36 w-full rounded-2xl" />
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-24 rounded-2xl" />
+            ))}
           </div>
-
-          {/* Charts Grid */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="rounded-2xl border-2 border-border/50 bg-card/60 backdrop-blur-xl p-6 shadow-xl"
+        </div>
+      ) : (
+        summary && (
+          <div
+            className={loading ? "space-y-4 opacity-60 transition-opacity" : "space-y-4"}
+            aria-busy={loading}
           >
-            <AnalyticsCharts start={start} end={end} />
-          </motion.div>
-        </>
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <p className="text-sm font-semibold text-muted-foreground">Total spent</p>
+              <p className="mt-0.5 text-4xl font-bold tabular-nums tracking-tight">
+                {formatMoney(total)}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {format(parseISO(range.startISO), "MMM d")} –{" "}
+                {format(parseISO(range.endISO), "MMM d, yyyy")}
+              </p>
+              <div className="mt-3 border-t border-border pt-3 text-sm">
+                {change === null ? (
+                  <span className="text-muted-foreground">
+                    No earlier period to compare with.
+                  </span>
+                ) : (
+                  <span
+                    className={
+                      change > 0
+                        ? "inline-flex items-center gap-1 font-semibold text-warning"
+                        : "inline-flex items-center gap-1 font-semibold text-success"
+                    }
+                  >
+                    {change > 0 ? (
+                      <ArrowUpRight className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <ArrowDownRight className="h-4 w-4" aria-hidden />
+                    )}
+                    {change > 0 ? "Up" : change < 0 ? "Down" : "Same as"}{" "}
+                    {change === 0 ? "" : `${Math.abs(change).toFixed(0)}% `}
+                    vs the previous {summary.days} days
+                  </span>
+                )}
+              </div>
+            </section>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="Daily average" value={formatMoney(dailyAvg)} />
+              <Stat label="Expenses" value={String(summary.expenseCount)} />
+              <Stat label="Projected / 30 days" value={formatMoney(dailyAvg * 30)} />
+              <Stat
+                label="Largest"
+                value={summary.topExpense ? formatMoney(summary.topExpense.amountCents) : "–"}
+                sub={summary.topExpense?.note || undefined}
+              />
+            </div>
+
+            <AnalyticsCharts startISO={range.startISO} endISO={range.endISO} tz={tz} />
+          </div>
+        )
       )}
-    </motion.div>
+    </div>
   );
 }
 
-function InsightCard({ title, value, subtext, icon, index }: { title: string; value: string; subtext: React.ReactNode; icon: React.ReactNode; index?: number }) {
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: (index ?? 0) * 0.1, duration: 0.5 }}
-      whileHover={{ y: -5, scale: 1.02 }}
-      className="rounded-2xl border-2 border-border/50 bg-card/60 backdrop-blur-xl p-6 shadow-lg transition-all hover:shadow-2xl hover:border-primary/40 overflow-hidden relative group"
-    >
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="flex items-center justify-between mb-4 relative z-10">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</h3>
-        <motion.div
-          whileHover={{ rotate: 10, scale: 1.1 }}
-          className="rounded-xl bg-gradient-to-br from-primary/20 to-purple-600/20 p-3 text-primary shadow-md"
-        >
-          {icon}
-        </motion.div>
-      </div>
-      <div className="text-2xl font-semibold text-foreground relative z-10 mb-2">
-        {value}
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground truncate relative z-10">{subtext}</p>
-    </motion.div>
+    <div className="min-w-0 rounded-2xl border border-border bg-card p-4">
+      <p className="text-sm font-semibold text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate text-xl font-bold tabular-nums">{value}</p>
+      {sub && <p className="truncate text-sm text-muted-foreground">{sub}</p>}
+    </div>
   );
 }

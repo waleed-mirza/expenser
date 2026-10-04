@@ -1,55 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { enqueueTransaction, flushQueue } from "@/lib/sync";
 import { v4 as uuid } from "uuid";
-import { Loader2 } from "lucide-react";
-import { twMerge } from "tailwind-merge";
-import { clsx } from "clsx";
-import { motion } from "framer-motion";
+import { Calendar, Check } from "lucide-react";
+import { format, subDays } from "date-fns";
+import { enqueueTransaction } from "@/lib/sync";
+import { DEFAULT_CURRENCY } from "@/lib/format";
+import {
+  dateInputToNoon,
+  parseAmountToCents,
+  sanitizeAmountInput,
+  toDateInputValue,
+} from "@/lib/transactions";
+import { useOnline } from "@/hooks/useOnline";
+import { useRecentNotes } from "@/hooks/useRecentNotes";
+import { Button } from "@/components/ui/button";
+import { Chip, chipClass } from "@/components/ui/chip";
+import { Notice, inputClass } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 
-export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
+/**
+ * Quick add. Optimised for speed: amount first, one-tap note chips, Enter
+ * saves, and the amount field is re-focused after saving for back-to-back
+ * entries. Saving only writes to the device; syncing happens in the background.
+ */
+export function TransactionForm() {
   const { data } = useSession();
+  const online = useOnline();
+  const { notes, remember } = useRecentNotes();
   const userId = data?.user?.id;
+
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [date, setDate] = useState(() => toDateInputValue(new Date()));
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [online, setOnline] = useState(true);
-  const [cachedUserId, setCachedUserId] = useState<string | null>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // Offline cold starts have no session yet; submit falls back to this.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handler = () => setOnline(navigator.onLine);
-    handler();
-    window.addEventListener("online", handler);
-    window.addEventListener("offline", handler);
-    return () => {
-      window.removeEventListener("online", handler);
-      window.removeEventListener("offline", handler);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = localStorage.getItem("lastUserId");
-    if (stored) setCachedUserId(stored);
-  }, []);
-
-  useEffect(() => {
-    if (!userId || typeof window === "undefined") return;
-    localStorage.setItem("lastUserId", userId);
-    setCachedUserId(userId);
+    if (userId) localStorage.setItem("lastUserId", userId);
   }, [userId]);
+
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+
+  const today = toDateInputValue(new Date());
+  const yesterday = toDateInputValue(subDays(new Date(), 1));
+  const customDate = date !== today && date !== yesterday;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
 
-    // Prevent double-submission
-    if (loading) return;
-
-    const effectiveUserId = userId ?? cachedUserId;
+    const effectiveUserId = userId ?? localStorage.getItem("lastUserId");
     if (!effectiveUserId) {
       setError(
         online
@@ -58,139 +64,151 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
       );
       return;
     }
+
+    const amountCents = parseAmountToCents(amount);
+    if (!amountCents) {
+      setError("Enter an amount greater than 0.");
+      amountRef.current?.focus();
+      return;
+    }
+
     setError(null);
-    setLoading(true);
-    const isOnline = online;
-    const clientId = uuid();
+    setSaving(true);
     const now = new Date();
-    const amountNumber = Math.round(Number(amount || "0") * 100);
-    const payload = {
-      clientId,
-      amountCents: amountNumber,
-      currencyCode: "PKR",
-      note: note || undefined,
-      occurredAt: now.toISOString(),
-      clientUpdatedAt: now.toISOString(),
-      source: isOnline ? "online" : "offline",
-    };
-
     try {
-      await enqueueTransaction(effectiveUserId, payload);
-
-      if (isOnline) {
-        const res = await fetch("/api/transactions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("Failed to save transaction:", errorText);
-
-          // Show user-friendly error but don't prevent form clear
-          setError("Saved locally. Will sync when connection is stable.");
-
-          // Clear error after 5 seconds
-          setTimeout(() => setError(null), 5000);
-        }
-
-        // Try to flush queue, but don't block on failure
-        try {
-          await flushQueue();
-        } catch (flushErr) {
-          console.error("Failed to flush queue:", flushErr);
-          // Queue will be retried by SyncStatus component
-        }
-      }
-
-      setAmount("");
-      setNote("");
-      onSaved?.();
+      await enqueueTransaction(effectiveUserId, {
+        clientId: uuid(),
+        amountCents,
+        currencyCode: DEFAULT_CURRENCY,
+        note: note.trim() || undefined,
+        occurredAt: (date === today ? now : dateInputToNoon(date)).toISOString(),
+        clientUpdatedAt: now.toISOString(),
+        source: online ? "online" : "offline",
+      });
     } catch (err) {
       console.error("Error saving transaction:", err);
-      setError("Failed to save transaction locally. Please try again.");
-    } finally {
-      setLoading(false);
+      setError("Couldn't save on this device. Please try again.");
+      setSaving(false);
+      return;
     }
+
+    remember(note);
+    setAmount("");
+    setNote("");
+    setDate(today);
+    setSaving(false);
+    setJustSaved(true);
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setJustSaved(false), 1500);
+    navigator.vibrate?.(12);
+    amountRef.current?.focus();
   };
 
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
-        <label className="mb-2 block text-sm font-medium text-foreground">
-          Amount (PKR)
+    <form
+      onSubmit={submit}
+      className="space-y-4 rounded-2xl border border-border bg-card p-4"
+      noValidate
+    >
+      <div>
+        <label htmlFor="amount" className="mb-1.5 block text-sm font-semibold">
+          Amount
         </label>
-        <div className="relative">
+        <div className="flex items-baseline gap-2 rounded-xl border-2 border-input px-4 py-2.5 focus-within:border-primary">
+          <span className="text-lg font-semibold text-muted-foreground">
+            {DEFAULT_CURRENCY}
+          </span>
           <input
-            type="number"
-            step="0.01"
-            min="0"
+            ref={amountRef}
+            id="amount"
+            inputMode="decimal"
+            autoComplete="off"
+            enterKeyHint="next"
+            placeholder="0"
             value={amount}
-            placeholder="0.00"
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm px-4 py-3 text-foreground shadow-sm placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all"
-            required
+            onChange={(e) => {
+              const next = sanitizeAmountInput(e.target.value);
+              if (next !== null) setAmount(next);
+              setError(null);
+            }}
+            className="w-full min-w-0 bg-transparent text-4xl font-bold tabular-nums placeholder:text-muted-foreground/70 focus:outline-none"
           />
-          <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/5 to-purple-500/5 pointer-events-none opacity-0 focus-within:opacity-100 transition-opacity" />
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <label className="mb-2 block text-sm font-medium text-foreground">
-          Note
+      <div>
+        <label htmlFor="note" className="mb-1.5 block text-sm font-semibold">
+          Note <span className="font-normal text-muted-foreground">(optional)</span>
         </label>
         <input
+          id="note"
           value={note}
+          maxLength={300}
+          autoComplete="off"
+          enterKeyHint="done"
+          placeholder="What was it for?"
           onChange={(e) => setNote(e.target.value)}
-          className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm px-4 py-3 text-foreground shadow-sm placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-background transition-all"
-          placeholder="e.g. Lunch, Coffee..."
+          className={inputClass}
         />
-      </motion.div>
+        <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1" role="group" aria-label="Quick notes">
+          {notes.slice(0, 6).map((n) => (
+            <Chip key={n} active={note === n} onClick={() => setNote(note === n ? "" : n)}>
+              {n}
+            </Chip>
+          ))}
+        </div>
+      </div>
 
-      {error && (
-        <motion.p
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-sm font-medium text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2"
-        >
-          {error}
-        </motion.p>
-      )}
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Date">
+        <Chip active={date === today} onClick={() => setDate(today)}>
+          Today
+        </Chip>
+        <Chip active={date === yesterday} onClick={() => setDate(yesterday)}>
+          Yesterday
+        </Chip>
+        <label className={cn(chipClass(customDate), "relative cursor-pointer")}>
+          <Calendar className="h-4 w-4" aria-hidden />
+          {customDate ? format(dateInputToNoon(date), "MMM d") : "Pick date"}
+          <input
+            type="date"
+            value={date}
+            max={today}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+            aria-label="Pick a date"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
 
-      <motion.button
+      {error && <Notice tone="error">{error}</Notice>}
+
+      <Button
         type="submit"
-        disabled={loading}
-        aria-label={online ? "Save transaction" : "Save transaction offline"}
-        whileHover={{ scale: loading ? 1 : 1.01 }}
-        whileTap={{ scale: loading ? 1 : 0.99 }}
-        className={twMerge(
-          clsx(
-            "flex w-full items-center justify-center rounded-xl border-0 bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-            loading && "cursor-wait"
-          )
+        size="lg"
+        loading={saving}
+        className={cn(
+          "w-full",
+          justSaved && "bg-success text-white hover:bg-success dark:text-background"
         )}
       >
-        {loading ? (
+        {justSaved ? (
           <>
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Saving...
+            <Check className="h-5 w-5" aria-hidden /> Saved
           </>
         ) : online ? (
-          "Save Transaction"
+          "Save expense"
         ) : (
-          "Save Offline"
+          "Save offline"
         )}
-      </motion.button>
+      </Button>
+      <p className="sr-only" role="status" aria-live="polite">
+        {justSaved ? "Expense saved" : ""}
+      </p>
+      {!online && (
+        <p className="text-center text-sm text-muted-foreground">
+          You&apos;re offline. It&apos;s saved on this device and will sync when you&apos;re back online.
+        </p>
+      )}
     </form>
   );
 }

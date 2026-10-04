@@ -1,503 +1,470 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { getTransactionsLocal, type LocalTransaction } from "@/lib/idb";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
-  enqueueTransaction,
-  enqueueTransactionDelete,
-  flushQueue,
-} from "@/lib/sync";
-import { format, parseISO } from "date-fns";
-import { motion, AnimatePresence } from "framer-motion";
-import { Edit2, Trash2, Save, X, Cloud, CloudOff, Calendar, Filter, Loader2 } from "lucide-react";
+  endOfDay,
+  format,
+  parseISO,
+  startOfDay,
+  subDays,
+} from "date-fns";
+import { ChevronRight, CloudOff, Loader2, Receipt } from "lucide-react";
+import {
+  cacheServerTransactions,
+  getQueuedOps,
+  getTransactionsLocal,
+} from "@/lib/idb";
+import { dayLabel, formatMoney } from "@/lib/format";
+import { groupByDay, overlayPending, type TxItem } from "@/lib/transactions";
+import { useDataVersions } from "@/hooks/useDataVersions";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { Chip } from "@/components/ui/chip";
+import { Notice, inputClass } from "@/components/ui/field";
+import { Skeleton } from "@/components/ui/skeleton";
+import { buttonClass } from "@/components/ui/button";
+import { TransactionSheet } from "@/components/TransactionSheet";
 
-interface TxItem {
-  id?: string;
-  clientId: string;
-  amountCents: number;
-  note?: string | null;
-  occurredAt: string;
-  currencyCode?: string;
-  status?: string;
+const PAGE_SIZE = 20;
+const COMPACT_SIZE = 8;
+
+type RangeKey = "all" | "today" | "7d" | "30d" | "custom";
+
+const RANGES: { key: RangeKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "today", label: "Today" },
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "custom", label: "Custom" },
+];
+
+type Bounds = { start: Date | null; end: Date | null };
+
+function getBounds(range: RangeKey, customStart: string, customEnd: string): Bounds {
+  const now = new Date();
+  switch (range) {
+    case "today":
+      return { start: startOfDay(now), end: null };
+    case "7d":
+      return { start: startOfDay(subDays(now, 6)), end: null };
+    case "30d":
+      return { start: startOfDay(subDays(now, 29)), end: null };
+    case "custom":
+      return {
+        start: customStart ? startOfDay(parseISO(customStart)) : null,
+        end: customEnd ? endOfDay(parseISO(customEnd)) : null,
+      };
+    default:
+      return { start: null, end: null };
+  }
 }
 
+function makeInRange({ start, end }: Bounds) {
+  return (iso: string) => {
+    const t = new Date(iso).getTime();
+    return (!start || t >= start.getTime()) && (!end || t <= end.getTime());
+  };
+}
+
+function boundsToParams(params: URLSearchParams, { start, end }: Bounds) {
+  if (start) params.set("start", start.toISOString());
+  if (end) params.set("end", end.toISOString());
+}
+
+type ServerTx = TxItem & { clientUpdatedAt?: string };
+
+function toTx(t: ServerTx): TxItem {
+  return {
+    clientId: t.clientId,
+    amountCents: t.amountCents,
+    note: t.note ?? null,
+    occurredAt: t.occurredAt,
+    currencyCode: t.currencyCode,
+  };
+}
+
+/**
+ * Expense feed, grouped by day. `compact` is the dashboard variant (latest few,
+ * no filters/paging). Always paints from the device first, then reconciles with
+ * the server, and merges not-yet-synced local changes on top.
+ */
 export function TransactionList({
   userId,
-  refreshToken = 0,
+  compact = false,
 }: {
   userId?: string;
-  refreshToken?: number;
+  compact?: boolean;
 }) {
   const [items, setItems] = useState<TxItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editAmount, setEditAmount] = useState<string>("");
-  const [editNote, setEditNote] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
-  const [page, setPage] = useState(0);
-  const [, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [notice, setNotice] = useState<"offline" | "error" | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [moreFailed, setMoreFailed] = useState(false);
+  const [range, setRange] = useState<RangeKey>("all");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const [selected, setSelected] = useState<TxItem | null>(null);
 
-  const { observerRef, isIntersecting } = useInfiniteScroll({ threshold: 0.1, rootMargin: "100px" });
+  const serverCount = useRef(0);
+  const loadedKey = useRef("");
+  const activeKey = useRef("");
   const loadingMoreRef = useRef(false);
 
-  // Initial load and filter changes
+  const { queued, synced } = useDataVersions();
+  const { observerRef, isIntersecting } = useInfiniteScroll({
+    threshold: 0.1,
+    rootMargin: "200px",
+  });
+
+  // Full (re)load: on mount, filter change, and after each completed sync.
   useEffect(() => {
     if (!userId) return;
-    const abortController = new AbortController();
+    const ctrl = new AbortController();
+    const key = `${range}|${customStart}|${customEnd}`;
+    const bounds = getBounds(range, customStart, customEnd);
+    const inRange = makeInRange(bounds);
+    const take = compact ? COMPACT_SIZE : PAGE_SIZE;
+    activeKey.current = key;
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
+    (async () => {
+      const ops = await getQueuedOps(200).catch(() => []);
+
+      // Instant paint from the device while the network catches up.
+      if (loadedKey.current !== key) {
+        const cached = await getTransactionsLocal(userId, 200).catch(() => []);
+        if (ctrl.signal.aborted) return;
+        const local = cached
+          .filter((t) => inRange(t.occurredAt as string))
+          .slice(0, take)
+          .map((t) => toTx(t as unknown as ServerTx));
+        setItems(overlayPending(local, ops, { includeNew: true, inRange }));
+        if (local.length) setLoading(false);
+      }
+
       try {
-        const params = new URLSearchParams({ take: "10", skip: "0" });
-        if (startDate) params.append("start", new Date(startDate).toISOString());
-        if (endDate) {
-          const endDateTime = `${endDate}T23:59:59.999Z`;
-          params.append("end", endDateTime);
-        }
-
-        const res = await fetch(`/api/transactions?${params.toString()}`, {
+        const params = new URLSearchParams({ take: String(take), skip: "0" });
+        boundsToParams(params, bounds);
+        const res = await fetch(`/api/transactions?${params}`, {
           credentials: "include",
-          signal: abortController.signal,
+          signal: ctrl.signal,
         });
-        if (res.ok) {
-          const data = await res.json();
-          setItems(data.items ?? []);
-          setTotal(data.total ?? 0);
-          setHasMore((data.items?.length ?? 0) < (data.total ?? 0));
-          setPage(0);
-        } else {
-          throw new Error("network");
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") return;
+        if (!res.ok) throw new Error("network");
+        const data: { items: ServerTx[]; total: number } = await res.json();
+        const freshOps = await getQueuedOps(200).catch(() => []);
+        if (ctrl.signal.aborted) return;
 
-        // Determine if error is due to being offline or server error
-        const isOffline = !navigator.onLine;
-        setError(
-          isOffline
-            ? "You're offline - showing cached transactions"
-            : "Failed to load transactions - showing cached data"
-        );
-
-        const cached = await getTransactionsLocal(userId, 50);
-        setItems(
-          cached.filter(
-            (t): t is LocalTransaction & TxItem =>
-              !t.isDeleted &&
-              typeof t.amountCents === "number" &&
-              typeof t.occurredAt === "string"
-          )
-        );
+        const serverItems = data.items.map(toTx);
+        serverCount.current = serverItems.length;
+        setItems(overlayPending(serverItems, freshOps, { includeNew: true, inRange }));
+        setTotal(data.total);
+        setHasMore(!compact && serverItems.length < data.total);
+        setMoreFailed(false);
+        setNotice(null);
+        void cacheServerTransactions(userId, data.items).catch(() => null);
+      } catch {
+        if (ctrl.signal.aborted) return;
+        setNotice(navigator.onLine ? "error" : "offline");
         setHasMore(false);
       } finally {
-        setLoading(false);
+        if (!ctrl.signal.aborted) {
+          loadedKey.current = key;
+          setLoading(false);
+        }
       }
-    };
-    load();
+    })();
 
-    return () => {
-      abortController.abort();
-    };
-  }, [userId, refreshToken, startDate, endDate]);
+    return () => ctrl.abort();
+  }, [userId, range, customStart, customEnd, synced, compact]);
 
-  // Load more when scrolling
+  // Something was saved/edited/deleted on this device: show it right away.
   useEffect(() => {
-    if (!userId || !isIntersecting || !hasMore || loadingMore || loading || loadingMoreRef.current) {
+    if (!userId || queued === 0) return;
+    let cancelled = false;
+    (async () => {
+      const ops = await getQueuedOps(200).catch(() => []);
+      if (cancelled) return;
+      const inRange = makeInRange(getBounds(range, customStart, customEnd));
+      setItems((prev) => overlayPending(prev, ops, { includeNew: true, inRange }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [queued, userId, range, customStart, customEnd]);
+
+  // Infinite scroll.
+  useEffect(() => {
+    if (
+      !userId ||
+      compact ||
+      !isIntersecting ||
+      !hasMore ||
+      loading ||
+      loadingMore ||
+      moreFailed ||
+      loadingMoreRef.current
+    ) {
       return;
     }
+    const keyAtStart = activeKey.current;
+    const bounds = getBounds(range, customStart, customEnd);
 
-    const loadMore = async () => {
+    (async () => {
       loadingMoreRef.current = true;
       setLoadingMore(true);
-      const skip = (page + 1) * 10;
-
       try {
-        const params = new URLSearchParams({ take: "10", skip: String(skip) });
-        if (startDate) params.append("start", new Date(startDate).toISOString());
-        if (endDate) {
-          const endDateTime = `${endDate}T23:59:59.999Z`;
-          params.append("end", endDateTime);
-        }
-
-        const res = await fetch(`/api/transactions?${params.toString()}`, {
+        const params = new URLSearchParams({
+          take: String(PAGE_SIZE),
+          skip: String(serverCount.current),
+        });
+        boundsToParams(params, bounds);
+        const res = await fetch(`/api/transactions?${params}`, {
           credentials: "include",
         });
+        if (!res.ok) throw new Error("network");
+        const data: { items: ServerTx[]; total: number } = await res.json();
+        if (activeKey.current !== keyAtStart) return; // filter changed meanwhile
 
-        if (res.ok) {
-          const data = await res.json();
-          const newItems = data.items ?? [];
-
-          setItems((prev) => [...prev, ...newItems]);
-          setTotal(data.total ?? 0);
-          setHasMore(skip + newItems.length < (data.total ?? 0));
-          setPage((prev) => prev + 1);
-        }
-      } catch (err) {
-        console.error("[Pagination] Error loading more transactions:", err);
+        const ops = await getQueuedOps(200).catch(() => []);
+        const more = overlayPending(data.items.map(toTx), ops, { includeNew: false });
+        serverCount.current += data.items.length;
+        setItems((prev) => {
+          const seen = new Set(prev.map((i) => i.clientId));
+          return [...prev, ...more.filter((i) => !seen.has(i.clientId))];
+        });
+        setTotal(data.total);
+        setHasMore(serverCount.current < data.total);
+      } catch {
+        setMoreFailed(true);
       } finally {
-        setLoadingMore(false);
         loadingMoreRef.current = false;
+        setLoadingMore(false);
       }
-    };
+    })();
+  }, [
+    isIntersecting,
+    hasMore,
+    loading,
+    loadingMore,
+    moreFailed,
+    items.length,
+    userId,
+    compact,
+    range,
+    customStart,
+    customEnd,
+  ]);
 
-    loadMore();
-  }, [isIntersecting, userId, hasMore, loadingMore, loading, page, startDate, endDate]);
+  const groups = useMemo(() => groupByDay(items), [items]);
+  const filtered = range !== "all";
 
-
-  useEffect(() => {
-    if (!editingId) return;
-    const tx = items.find((it) => it.clientId === editingId);
-    if (!tx) return;
-    const amt = typeof tx.amountCents === "number" ? tx.amountCents : 0;
-    setEditAmount((amt / 100).toFixed(2));
-    setEditNote(tx.note ?? "");
-  }, [editingId, items]);
-
-  const startEdit = (tx: TxItem) => {
-    setEditingId(tx.clientId);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditAmount("");
-    setEditNote("");
-  };
-
-  const saveEdit = async () => {
-    if (!userId || !editingId) return;
-    setSaving(true);
-    const payload = {
-      clientId: editingId,
-      amountCents: Math.round(Number(editAmount || "0") * 100),
-      note: editNote || undefined,
-      clientUpdatedAt: new Date().toISOString(),
-    };
-    try {
-      const res = await fetch(`/api/transactions`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("network");
-      const data = await res.json();
-      setItems((prev) =>
-        prev.map((it) =>
-          it.clientId === editingId ? { ...it, ...data.item } : it
-        )
-      );
-      cancelEdit();
-    } catch {
-      // offline fallback: queue update
-      await enqueueTransaction(userId, payload);
-      await flushQueue();
-      setItems((prev) =>
-        prev.map((it) =>
-          it.clientId === editingId
-            ? { ...it, ...payload, occurredAt: it.occurredAt }
-            : it
-        )
-      );
-      cancelEdit();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteTx = async (tx: TxItem) => {
-    if (!userId) return;
-    setDeletingId(tx.clientId);
-    const payload = {
-      clientId: tx.clientId,
-      clientUpdatedAt: new Date().toISOString(),
-    };
-    try {
-      const res = await fetch(`/api/transactions`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("network");
-      setItems((prev) => prev.filter((it) => it.clientId !== tx.clientId));
-    } catch {
-      await enqueueTransactionDelete(
-        userId,
-        tx.clientId,
-        payload.clientUpdatedAt
-      );
-      await flushQueue();
-      setItems((prev) => prev.filter((it) => it.clientId !== tx.clientId));
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const clearFilters = () => {
-    setStartDate("");
-    setEndDate("");
-  };
-
-  const formatDateRange = () => {
-    if (!startDate && !endDate) return null;
-    try {
-      const start = startDate ? format(parseISO(startDate), "MMM d, yyyy") : "Beginning";
-      const end = endDate ? format(parseISO(endDate), "MMM d, yyyy") : "Today";
-      return `${start} - ${end}`;
-    } catch {
-      return null;
-    }
-  };
-
-  const dateRangeText = formatDateRange();
+  const updateItem = (updated: TxItem) =>
+    setItems((prev) => prev.map((i) => (i.clientId === updated.clientId ? updated : i)));
+  const removeItem = (clientId: string) =>
+    setItems((prev) => prev.filter((i) => i.clientId !== clientId));
 
   return (
-    <div className="space-y-6">
-      {/* Date Filters */}
-      <div className="rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold text-foreground">Filter by Date</h3>
-          </div>
-          {dateRangeText && (
-            <span className="text-xs font-medium text-primary bg-primary/10 px-3 py-1 rounded-full">
-              {dateRangeText}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[140px]">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Start Date
-            </label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-lg border border-border/50 bg-background/60 px-3 pl-9 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-              />
-            </div>
-          </div>
-          <div className="flex-1 min-w-[140px]">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              End Date
-            </label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full rounded-lg border border-border/50 bg-background/60 px-3 pl-9 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
-              />
-            </div>
-          </div>
-          {(startDate || endDate) && (
-            <button
-              onClick={clearFilters}
-              aria-label="Clear date filters"
-              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 text-sm font-medium text-amber-600 dark:text-amber-500">
-          {error}
-        </div>
-      )}
-
-      {dateRangeText && (
-        <div className="flex items-center justify-between px-1">
-          <p className="text-sm text-muted-foreground">
-            Showing <span className="font-medium text-foreground">{items.length}</span> transaction{items.length !== 1 ? 's' : ''} 
-            {dateRangeText && ` for ${dateRangeText}`}
-          </p>
-        </div>
-      )}
-      
-      <ul className="space-y-3">
-        {loading && items.length === 0 ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="flex h-20 w-full animate-pulse rounded-xl border border-border bg-card p-4 shadow-sm"
-              >
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-24 rounded bg-muted"></div>
-                  <div className="h-3 w-32 rounded bg-muted"></div>
-                </div>
-                <div className="h-8 w-8 rounded bg-muted"></div>
-              </div>
+    <div className="space-y-4">
+      {!compact && (
+        <div className="space-y-3">
+          <div
+            className="-mx-4 flex gap-2 overflow-x-auto px-4"
+            role="group"
+            aria-label="Filter by date"
+          >
+            {RANGES.map((r) => (
+              <Chip key={r.key} active={range === r.key} onClick={() => setRange(r.key)}>
+                {r.label}
+              </Chip>
             ))}
           </div>
-        ) : (
-          <AnimatePresence initial={false}>
-          {items.map((tx) => (
-            <motion.li
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              key={tx.clientId}
-              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border-2 border-border/50 bg-card/80 backdrop-blur-sm p-5 shadow-lg transition-all hover:border-primary/40 sm:flex-row sm:items-center"
-            >
-              <div className="flex flex-1 flex-col gap-1">
-                {editingId === tx.clientId ? (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs font-medium text-muted-foreground">Amount</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={editAmount}
-                        onChange={(e) => setEditAmount(e.target.value)}
-                        className="w-32 rounded-md border border-input bg-background/50 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                    <div className="flex flex-1 flex-col gap-1">
-                      <label className="text-xs font-medium text-muted-foreground">Note</label>
-                      <input
-                        value={editNote}
-                        onChange={(e) => setEditNote(e.target.value)}
-                        placeholder="Note"
-                        className="w-full rounded-md border border-input bg-background/50 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-semibold text-foreground">
-                          PKR {(tx.amountCents / 100).toFixed(2)}
-                        </span>
-                        {tx.note && (
-                          <span className="text-sm text-muted-foreground line-clamp-1">
-                            {tx.note}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(tx.occurredAt), "MMM d, yyyy 'at' h:mm a")}
-                      </span>
-                    </div>
-                  </>
+
+          {range === "custom" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="filter-from" className="block text-sm font-semibold">
+                  From
+                </label>
+                <input
+                  id="filter-from"
+                  type="date"
+                  value={customStart}
+                  max={customEnd || undefined}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="filter-to" className="block text-sm font-semibold">
+                  To
+                </label>
+                <input
+                  id="filter-to"
+                  type="date"
+                  value={customEnd}
+                  min={customStart || undefined}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* The server count excludes unsynced local items, so hide it while any exist. */}
+          {total !== null && !loading && !items.some((i) => i.pending) && (
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {total} expense{total === 1 ? "" : "s"}
+              {filtered && " in this range"}
+            </p>
+          )}
+        </div>
+      )}
+
+      {notice && (
+        <Notice tone="warning">
+          {notice === "offline"
+            ? "You're offline. Showing what's saved on this device."
+            : "Couldn't reach the server. Showing what's saved on this device."}
+        </Notice>
+      )}
+
+      {loading && items.length === 0 ? (
+        <div className="space-y-2" aria-busy="true" aria-label="Loading expenses">
+          {Array.from({ length: compact ? 3 : 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyState filtered={filtered} compact={compact} />
+      ) : (
+        groups.map((group, index) => {
+          // The last day may continue on the next page, so its total isn't final yet.
+          const totalIsFinal = !(hasMore && index === groups.length - 1);
+          return (
+            <section key={group.key} aria-label={dayLabel(group.date)}>
+              <div className="mb-1.5 flex items-baseline justify-between px-1">
+                <h3 className="text-sm font-semibold text-muted-foreground">
+                  {dayLabel(group.date)}
+                </h3>
+                {totalIsFinal && (
+                  <span className="text-sm font-semibold tabular-nums text-muted-foreground">
+                    {formatMoney(group.totalCents)}
+                  </span>
                 )}
               </div>
+              <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+                {group.items.map((tx) => (
+                  <li key={tx.clientId}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(tx)}
+                      aria-label={`Edit ${tx.note || "expense"}, ${formatMoney(
+                        tx.amountCents,
+                        tx.currencyCode
+                      )}, ${format(new Date(tx.occurredAt), "h:mm a")}`}
+                      className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted active:bg-muted"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={
+                            tx.note
+                              ? "block truncate text-base font-medium"
+                              : "block truncate text-base text-muted-foreground"
+                          }
+                        >
+                          {tx.note || "Expense"}
+                        </span>
+                        <span className="mt-0.5 flex items-center gap-2 text-sm text-muted-foreground">
+                          {format(new Date(tx.occurredAt), "h:mm a")}
+                          {tx.pending && (
+                            <span className="inline-flex items-center gap-1 font-medium text-warning">
+                              <CloudOff className="h-3.5 w-3.5" aria-hidden />
+                              Not synced
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-lg font-semibold tabular-nums">
+                        {formatMoney(tx.amountCents, tx.currencyCode)}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })
+      )}
 
-              <div className="mt-4 flex items-center justify-between gap-4 border-t border-border pt-4 sm:border-t-0 sm:pt-0 sm:mt-0 sm:pl-4 sm:flex-col sm:items-end sm:gap-1">
-                <div className="flex items-center gap-1.5 text-xs font-medium">
-                   {tx.status === "queued" ? (
-                    <span className="inline-flex items-center gap-1 text-amber-500">
-                      <CloudOff className="h-3 w-3" />
-                      Pending
-                    </span>
-                   ) : (
-                    <span className="inline-flex items-center gap-1 text-emerald-500">
-                      <Cloud className="h-3 w-3" />
-                      Synced
-                    </span>
-                   )}
-                </div>
+      {!compact && items.length > 0 && hasMore && (
+        <div ref={observerRef} className="flex min-h-14 items-center justify-center py-2">
+          {moreFailed ? (
+            <button
+              type="button"
+              onClick={() => setMoreFailed(false)}
+              className={buttonClass("secondary", "sm")}
+            >
+              Couldn&apos;t load more · Retry
+            </button>
+          ) : (
+            loadingMore && (
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Loading more…
+              </span>
+            )
+          )}
+        </div>
+      )}
 
-                <div className="flex gap-2">
-                  {editingId === tx.clientId ? (
-                    <>
-                      <button
-                        onClick={saveEdit}
-                        disabled={saving}
-                        aria-label="Save transaction changes"
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        {saving ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        aria-label="Cancel editing transaction"
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/80 active:scale-95 transition-all"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => startEdit(tx)}
-                        aria-label={`Edit transaction: ${(tx.amountCents / 100).toFixed(2)} PKR ${tx.note ? '- ' + tx.note : ''}`}
-                        className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary active:scale-95 transition-all"
-                        title="Edit"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteTx(tx)}
-                        disabled={deletingId === tx.clientId}
-                        aria-label={`Delete transaction: ${(tx.amountCents / 100).toFixed(2)} PKR ${tx.note ? '- ' + tx.note : ''}`}
-                        className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive active:scale-95 transition-all disabled:opacity-50"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </motion.li>
-          ))}
-          </AnimatePresence>
-        )}
+      {!compact && items.length > 0 && !hasMore && !loading && (
+        <p className="py-4 text-center text-sm text-muted-foreground">
+          That&apos;s everything.
+        </p>
+      )}
 
-        {/* Infinite scroll sentinel */}
-        {items.length > 0 && hasMore && (
-          <div ref={observerRef} className="py-4 flex justify-center min-h-15">
-            {loadingMore ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Loading more transactions...</span>
-              </div>
-            ) : (
-              <div className="h-4" />
-            )}
-          </div>
-        )}
+      {selected && userId && (
+        <TransactionSheet
+          key={selected.clientId}
+          tx={selected}
+          userId={userId}
+          onClose={() => setSelected(null)}
+          onSaved={updateItem}
+          onDeleted={removeItem}
+        />
+      )}
+    </div>
+  );
+}
 
-        {/* End of list message */}
-        {items.length > 0 && !hasMore && !loading && (
-          <div className="py-8 flex justify-center">
-            <p className="text-sm font-medium text-muted-foreground bg-muted/30 px-4 py-2 rounded-lg">
-              No more transactions
-            </p>
-          </div>
-        )}
-
-        {items.length === 0 && !loading && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-base font-medium text-foreground mb-1">No transactions found</p>
-            <p className="text-sm text-muted-foreground">
-              {startDate || endDate ? "Try adjusting your date filters" : "Add one to get started"}
-            </p>
-          </div>
-        )}
-      </ul>
+function EmptyState({ filtered, compact }: { filtered: boolean; compact: boolean }) {
+  if (compact) {
+    return (
+      <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+        No expenses yet. Add your first one above.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border px-6 py-14 text-center">
+      <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Receipt className="h-6 w-6" aria-hidden />
+      </span>
+      <p className="text-base font-semibold">
+        {filtered ? "No expenses in this range" : "No expenses yet"}
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {filtered
+          ? "Try a different date range."
+          : "Add your first expense and it will show up here."}
+      </p>
+      {!filtered && (
+        <Link href="/dashboard" className={`${buttonClass("primary", "md")} mt-5`}>
+          Add an expense
+        </Link>
+      )}
     </div>
   );
 }
