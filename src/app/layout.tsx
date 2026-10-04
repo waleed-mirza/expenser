@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { RegisterSW } from "./register-sw";
@@ -14,7 +14,11 @@ export const metadata: Metadata = {
   title: "Expenser",
   description: "Offline-friendly expense tracker",
   manifest: "/manifest.json",
-  viewport: "width=device-width, initial-scale=1",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
   themeColor: "#09090b", // Zinc 950
 };
 

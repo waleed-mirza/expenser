@@ -1,6 +1,7 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { signOutAndClearCaches } from "@/lib/sign-out";
 import { useEffect, useState } from "react";
 import { UnauthorizedPanel } from "@/components/UnauthorizedPanel";
 import { AppLayout } from "@/components/AppLayout";
@@ -122,7 +123,7 @@ export default function SettingsPage() {
         >
           <h3 className="text-xl font-bold text-foreground mb-6">Account</h3>
           <motion.button
-            onClick={() => signOut({ callbackUrl: "/signin" })}
+            onClick={() => signOutAndClearCaches("/signin")}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className="rounded-xl bg-destructive/10 border-2 border-destructive/30 px-6 py-3 text-destructive font-bold transition-all hover:bg-destructive/20 hover:border-destructive/40"

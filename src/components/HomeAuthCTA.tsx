@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
+import { signOutAndClearCaches } from "@/lib/sign-out";
 
 export function HomeAuthCTA() {
   const { data, status } = useSession();
@@ -30,7 +31,7 @@ export function HomeAuthCTA() {
         </motion.div>
         <motion.button
           type="button"
-          onClick={() => signOut({ callbackUrl: "/" })}
+          onClick={() => signOutAndClearCaches("/")}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="rounded-full border-2 border-border/50 bg-background/80 backdrop-blur-xl px-8 py-3.5 text-sm font-semibold text-foreground hover:bg-card/80 hover:border-primary/30 transition-all shadow-lg"

@@ -1,4 +1,4 @@
-const SW_VERSION = "v1";
+const SW_VERSION = new URL(self.location.href).searchParams.get("v") || "v1";
 const CACHE_NAME = `expenser-${SW_VERSION}`;
 
 const ASSETS_TO_CACHE = [
@@ -39,6 +39,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Never cache API responses: they are per-user and must always be fresh.
+  if (url.pathname.startsWith("/api/")) {
+    return;
+  }
+
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request))
@@ -59,54 +64,22 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// Background Sync for offline transactions
+// Background Sync: the queue lives in IndexedDB and is flushed by the app
+// (see flushQueue in src/lib/sync.ts), so just ask open clients to sync.
+async function requestClientSync() {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true });
+  clients.forEach((client) => client.postMessage({ type: "SYNC_REQUEST" }));
+}
+
 self.addEventListener("sync", (event) => {
   if (event.tag === "sync-transactions") {
-    event.waitUntil(syncTransactions());
+    event.waitUntil(requestClientSync());
   }
 });
-
-async function syncTransactions() {
-  try {
-    // Import IDB helper to access queued operations
-    const { openDB } = await import("idb");
-    const db = await openDB("expenser-offline", 1);
-
-    const queuedOps = await db.getAll("queue");
-
-    if (queuedOps.length === 0) {
-      return;
-    }
-
-    const response = await fetch("/api/sync/batch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ items: queuedOps }),
-    });
-
-    if (response.ok) {
-      // Clear the queue on success
-      await db.clear("queue");
-
-      // Notify all clients about successful sync
-      const clients = await self.clients.matchAll();
-      clients.forEach((client) => {
-        client.postMessage({
-          type: "SYNC_COMPLETE",
-          count: queuedOps.length,
-        });
-      });
-    }
-  } catch (error) {
-    console.error("Background sync failed:", error);
-    throw error; // Re-throw to let browser retry
-  }
-}
 
 // Periodic Background Sync (if supported)
 self.addEventListener("periodicsync", (event) => {
   if (event.tag === "sync-transactions-periodic") {
-    event.waitUntil(syncTransactions());
+    event.waitUntil(requestClientSync());
   }
 });
