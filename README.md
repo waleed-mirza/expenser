@@ -40,7 +40,6 @@ Edit `.env.local` with your values:
 DATABASE_URL="postgresql://user:password@host:5432/expenser?sslmode=require"
 NEXTAUTH_SECRET="your-strong-secret-here"
 NEXTAUTH_URL="http://localhost:3000"
-APP_NAME="Expenser"
 SW_VERSION="v1"
 ```
 
@@ -59,8 +58,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ```powershell
 npx prisma generate
-npx prisma migrate dev --name init
+npx prisma migrate dev
 ```
+
+This applies the migrations in `prisma/migrations`. For a production database use `npx prisma migrate deploy`.
+
+> The `remove_income_enum` migration drops the unused `income` enum value and fails (rolling back) if any existing row still uses it.
 
 ### 4. Run the dev server
 
@@ -126,11 +129,13 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
    - `DATABASE_URL`: Neon pooled connection string
    - `NEXTAUTH_SECRET`: production secret (generate new)
    - `NEXTAUTH_URL`: `https://yourdomain.com`
-4. Deploy
+   - `SW_VERSION`: bump (e.g. `v2`) to invalidate the service worker cache on a release
+4. Run `npx prisma migrate deploy` against the production database
+5. Deploy
 
 ## Tech Stack
 
-- **Framework**: Next.js 16.1.1 (App Router)
+- **Framework**: Next.js 16.3.8 (App Router)
 - **Auth**: NextAuth 4.24.8 (Credentials + JWT)
 - **Database**: Neon Postgres + Prisma ORM 6.2.1
 - **Offline**: Service Worker + IndexedDB (idb)
