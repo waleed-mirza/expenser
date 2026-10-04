@@ -19,10 +19,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const results: any[] = [];
+  const results: { clientId: unknown; serverId?: string; status: string; error?: string }[] = [];
 
   for (const item of json.items) {
-    const { entity, op } = item as any;
+    const { entity, op } = item as { entity?: string; op?: string };
     if (entity === "transaction") {
       if (op === "delete") {
         const parsedDelete = transactionDeleteSchema.safeParse(item.payload);

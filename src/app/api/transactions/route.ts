@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   transactionDeleteSchema,
@@ -20,10 +21,10 @@ export async function GET(req: Request) {
   const take = Number(searchParams.get("take")) || 50;
   const skip = Number(searchParams.get("skip")) || 0;
 
-  const where: any = { userId, isDeleted: false };
+  const where: Prisma.TransactionWhereInput = { userId, isDeleted: false };
   if (start) where.occurredAt = { gte: new Date(start) };
   if (end)
-    where.occurredAt = { ...(where.occurredAt ?? {}), lte: new Date(end) };
+    where.occurredAt = { ...(where.occurredAt as Prisma.DateTimeFilter), lte: new Date(end) };
 
   const [items, total] = await Promise.all([
     prisma.transaction.findMany({

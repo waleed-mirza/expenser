@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { HomeAuthCTA } from "@/components/HomeAuthCTA";
-import { Wallet, ShieldCheck, Database, Sparkles, TrendingUp, Zap } from "lucide-react";
+import { Wallet, ShieldCheck, Database } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+const noopSubscribe = () => () => {};
 
 export default function Home() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // false during SSR/hydration, true once mounted on the client
+  const mounted = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false
+  );
 
   if (!mounted) return null;
 

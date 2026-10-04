@@ -36,7 +36,7 @@ export async function PUT(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   const { currencyCode, timezone } = parsed.data;
 
-  const data: any = {};
+  const data: { timezone?: string } = {};
   if (timezone) data.timezone = timezone;
 
   const user = await prisma.user.update({

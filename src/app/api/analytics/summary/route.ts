@@ -55,7 +55,7 @@ export async function GET(req: Request) {
   // Previous period comparison
   const prevEnd = startDate;
   const prevStart = new Date(startDate.getTime() - ms);
-  const [prev] = (await prisma.$queryRawUnsafe<any[]>(
+  const [prev] = (await prisma.$queryRawUnsafe<{ expense_cents: bigint | number }[]>(
     `SELECT
       COALESCE(SUM("amountCents"), 0) AS expense_cents
      FROM "Transaction"

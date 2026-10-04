@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import type { User } from "next-auth";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -36,7 +37,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name ?? undefined,
           timezone: user.timezone,
-        } as any;
+        } satisfies User;
       },
     }),
   ],
@@ -46,8 +47,8 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.userId = (user as any).id;
-        token.timezone = (user as any).timezone;
+        token.userId = user.id;
+        token.timezone = user.timezone;
       }
       return token;
     },

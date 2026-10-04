@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     new Date(new Date().setDate(new Date().getDate() - 84)).toISOString();
   const end = searchParams.get("end") || new Date().toISOString();
 
-  const rows = await prisma.$queryRawUnsafe<any[]>(
+  const rows = await prisma.$queryRawUnsafe<{ week_start: Date; expense_cents: bigint | number }[]>(
     `SELECT date_trunc('week', "occurredAt" AT TIME ZONE $3) AS week_start,
             SUM("amountCents") AS expense_cents
      FROM "Transaction"
@@ -31,5 +31,5 @@ export async function GET(req: Request) {
     end
   );
 
-  return NextResponse.json({ tz, start, end, weeks: rows });
+  return NextResponse.json({ tz, start, end, weeks: rows.map((r) => ({ ...r, expense_cents: Number(r.expense_cents) })) });
 }

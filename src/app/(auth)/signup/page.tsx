@@ -1,10 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Loader2, Mail, Lock, User, DollarSign, Globe, ArrowRight, Sparkles } from "lucide-react";
+
+const DEFAULT_TIMEZONE = "Asia/Karachi";
+const noopSubscribe = () => () => {};
+
+function getBrowserTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+}
 
 const currencies = ["PKR", "USD", "EUR", "GBP", "INR", "AED", "AUD", "CAD"];
 
@@ -14,19 +25,16 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("PKR");
-  const [timezone, setTimezone] = useState("Asia/Karachi");
+  const detectedTimezone = useSyncExternalStore(
+    noopSubscribe,
+    getBrowserTimezone,
+    () => DEFAULT_TIMEZONE
+  );
+  const [timezoneChoice, setTimezoneChoice] = useState<string | null>(null);
+  const timezone = timezoneChoice ?? detectedTimezone;
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (tz) setTimezone(tz);
-    } catch {
-      setTimezone("Asia/Karachi");
-    }
-  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,7 +209,7 @@ export default function SignUpPage() {
                 <input
                   className="w-full rounded-xl border-2 border-border/50 bg-background/60 backdrop-blur-sm pl-10 pr-4 py-3 text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                   value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
+                  onChange={(e) => setTimezoneChoice(e.target.value)}
                   required
                 />
               </div>

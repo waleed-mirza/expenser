@@ -236,30 +236,3 @@ function InsightCard({ title, value, subtext, icon, index }: { title: string; va
     </motion.div>
   );
 }
-
-function StatCard({
-  label,
-  value,
-  tone,
-  asCount,
-}: {
-  label: string;
-  value: number;
-  tone: "red" | "green" | "indigo" | "slate";
-  asCount?: boolean;
-}) {
-  const colorMap: Record<typeof tone, string> = {
-    red: "text-red-600",
-    green: "text-emerald-600",
-    indigo: "text-indigo-600",
-    slate: "text-slate-800",
-  };
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-center shadow-sm">
-      <p className="text-sm font-medium text-slate-700">{label}</p>
-      <p className={`text-2xl font-bold ${colorMap[tone]}`}>
-        {asCount ? value : (value / 100).toFixed(2)} {asCount ? "" : "PKR"}
-      </p>
-    </div>
-  );
-}
