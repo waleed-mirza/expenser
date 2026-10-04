@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { getTransactionsLocal } from "@/lib/idb";
+import { getTransactionsLocal, type LocalTransaction } from "@/lib/idb";
 import {
   enqueueTransaction,
   enqueueTransactionDelete,
@@ -76,8 +76,8 @@ export function TransactionList({
         } else {
           throw new Error("network");
         }
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
 
         // Determine if error is due to being offline or server error
         const isOffline = !navigator.onLine;
@@ -88,7 +88,14 @@ export function TransactionList({
         );
 
         const cached = await getTransactionsLocal(userId, 50);
-        setItems(cached ?? []);
+        setItems(
+          cached.filter(
+            (t): t is LocalTransaction & TxItem =>
+              !t.isDeleted &&
+              typeof t.amountCents === "number" &&
+              typeof t.occurredAt === "string"
+          )
+        );
         setHasMore(false);
       } finally {
         setLoading(false);

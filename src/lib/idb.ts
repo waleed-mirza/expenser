@@ -2,32 +2,49 @@ import { openDB, type DBSchema } from "idb";
 
 export type QueueStatus = "queued" | "syncing" | "synced" | "error";
 
+export interface LocalTransaction {
+  clientId: string;
+  userId?: string;
+  amountCents?: number;
+  currencyCode?: string;
+  note?: string | null;
+  occurredAt?: string;
+  clientUpdatedAt?: string;
+  isDeleted?: boolean;
+  status?: string;
+  [key: string]: unknown;
+}
+
+export type QueuePayload = Record<string, unknown>;
+
+export interface QueuedOp {
+  clientId: string;
+  entity: "transaction" | "category";
+  op: "upsert" | "delete";
+  payload: QueuePayload;
+  userId: string;
+  clientUpdatedAt: string;
+  status: QueueStatus;
+}
+
 interface ExpenserDB extends DBSchema {
   transactions: {
     key: string; // clientId
-    value: any;
+    value: LocalTransaction;
     indexes: { userId: string; occurredAt: string; clientUpdatedAt: string };
   };
   categories: {
     key: string;
-    value: any;
+    value: Record<string, unknown>;
     indexes: { userId: string; clientUpdatedAt: string };
   };
   queue: {
     key: number;
-    value: {
-      clientId: string;
-      entity: "transaction" | "category";
-      op: "upsert" | "delete";
-      payload: any;
-      userId: string;
-      clientUpdatedAt: string;
-      status: QueueStatus;
-    };
+    value: QueuedOp;
   };
   meta: {
     key: string;
-    value: any;
+    value: unknown;
   };
 }
 
@@ -49,7 +66,7 @@ async function getDb() {
   });
 }
 
-export async function saveTransactionLocal(value: any) {
+export async function saveTransactionLocal(value: LocalTransaction) {
   const db = await getDb();
   await db.put("transactions", value);
 }
@@ -60,7 +77,7 @@ export async function getTransactionsLocal(userId: string, limit = 50) {
   const tx = db.transaction("transactions", "readonly");
   const index = tx.objectStore("transactions").index("userId");
 
-  const results: any[] = [];
+  const results: LocalTransaction[] = [];
   let cursor = await index.openCursor(IDBKeyRange.only(userId), "prev"); // newest first
 
   while (cursor && results.length < limit) {
@@ -75,7 +92,7 @@ export async function queueOperation(op: {
   clientId: string;
   entity: "transaction" | "category";
   op: "upsert" | "delete";
-  payload: any;
+  payload: QueuePayload;
   userId: string;
   clientUpdatedAt: string;
 }) {
@@ -105,7 +122,7 @@ export async function getQueuedOps(limit = 100) {
   const tx = db.transaction("queue", "readonly");
   const store = tx.objectStore("queue");
 
-  const results: any[] = [];
+  const results: (QueuedOp & { id: number })[] = [];
   let cursor = await store.openCursor();
 
   while (cursor && results.length < limit) {
@@ -121,7 +138,15 @@ export async function clearQueue() {
   await db.clear("queue");
 }
 
-export async function setMeta(key: string, value: any) {
+/** Remove only the given queue entries (by key), leaving newer ones intact. */
+export async function removeQueuedOps(ids: number[]) {
+  if (!ids.length) return;
+  const db = await getDb();
+  const tx = db.transaction("queue", "readwrite");
+  await Promise.all([...ids.map((id) => tx.store.delete(id)), tx.done]);
+}
+
+export async function setMeta(key: string, value: unknown) {
   const db = await getDb();
   await db.put("meta", value, key);
 }

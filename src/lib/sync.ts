@@ -1,7 +1,8 @@
 import {
   getQueuedOps,
-  clearQueue,
+  removeQueuedOps,
   queueOperation,
+  type QueuePayload,
   saveTransactionLocal,
   markTransactionDeleted,
 } from "@/lib/idb";
@@ -11,11 +12,14 @@ export type SyncPayload = {
   clientId: string;
   entity: "transaction" | "category";
   op: "upsert" | "delete";
-  payload: any;
+  payload: QueuePayload;
   clientUpdatedAt: string;
 };
 
-export async function enqueueTransaction(userId: string, payload: any) {
+export async function enqueueTransaction(
+  userId: string,
+  payload: QueuePayload & { clientId?: string; clientUpdatedAt?: string }
+) {
   const clientId = payload.clientId ?? uuid();
   const clientUpdatedAt = payload.clientUpdatedAt ?? new Date().toISOString();
   const record = {
@@ -92,11 +96,12 @@ export async function flushQueue() {
     }
 
     const data = await res.json();
-    // Only clear queue on successful sync
-    await clearQueue();
+    // Remove only what was sent, so ops queued meanwhile (or beyond the batch limit) survive
+    await removeQueuedOps(ops.map((op) => op.id));
     return { flushed: ops.length, data };
-  } catch (err: any) {
+  } catch (err) {
     console.error("Sync error:", err);
-    return { flushed: 0, error: err.message, failed: true };
+    const error = err instanceof Error ? err.message : String(err);
+    return { flushed: 0, error, failed: true };
   }
 }
