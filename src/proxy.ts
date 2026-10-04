@@ -16,11 +16,21 @@ const PUBLIC_PATHS = [
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  const isAuthPage = pathname === "/signin" || pathname === "/signup";
+
+  if (!isAuthPage && PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+
+  // Already signed in: skip the auth pages.
+  if (isAuthPage) {
+    return token
+      ? NextResponse.redirect(new URL("/dashboard", req.url))
+      : NextResponse.next();
+  }
+
   if (!token) {
     // API clients (incl. the offline sync) need a status code, not an HTML redirect.
     if (pathname.startsWith("/api/")) {

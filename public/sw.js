@@ -2,7 +2,6 @@ const SW_VERSION = new URL(self.location.href).searchParams.get("v") || "v1";
 const CACHE_NAME = `expenser-${SW_VERSION}`;
 
 const ASSETS_TO_CACHE = [
-  "/",
   "/dashboard",
   "/transactions",
   "/analytics",
