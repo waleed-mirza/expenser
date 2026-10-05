@@ -108,7 +108,7 @@ export function QuickRepeat({ userId }: { userId?: string }) {
         <RotateCcw className="h-4 w-4" aria-hidden />
         Tap to repeat
       </h2>
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
         {favourites.map((fav) => (
           <button
             key={`${fav.note}|${fav.amountCents}`}

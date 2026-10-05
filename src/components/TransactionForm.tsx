@@ -150,7 +150,7 @@ export function TransactionForm() {
           onChange={(e) => setNote(e.target.value)}
           className={inputClass}
         />
-        <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1" role="group" aria-label="Quick notes">
+        <div className="no-scrollbar -mx-4 mt-2 flex gap-2 overflow-x-auto px-4" role="group" aria-label="Quick notes">
           {notes.slice(0, 6).map((n) => (
             <Chip key={n} active={note === n} onClick={() => setNote(note === n ? "" : n)}>
               {n}

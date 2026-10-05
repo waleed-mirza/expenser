@@ -269,7 +269,7 @@ export function TransactionList({
       {!compact && (
         <div className="space-y-3">
           <div
-            className="-mx-4 flex gap-2 overflow-x-auto px-4"
+            className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4"
             role="group"
             aria-label="Filter by date"
           >

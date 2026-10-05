@@ -6,15 +6,15 @@ import { TransactionList } from "@/components/TransactionList";
 import { SpendOverview } from "@/components/SpendOverview";
 import { QuickRepeat } from "@/components/QuickRepeat";
 
-/** Home: glanceable totals, one-tap repeats, quick add, then the latest entries. */
+/** Home: quick add first, then one-tap repeats, glanceable totals and the latest entries. */
 export function DashboardShell({ userId }: { userId?: string | null }) {
   const id = userId ?? undefined;
 
   return (
     <div className="space-y-5">
-      <SpendOverview userId={id} />
-      <QuickRepeat userId={id} />
       <TransactionForm />
+      <QuickRepeat userId={id} />
+      <SpendOverview userId={id} />
 
       <section aria-label="Recent expenses" className="space-y-2">
         <div className="flex items-baseline justify-between px-1">

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 export const chipClass = (active: boolean) =>
   cn(
-    "inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors",
+    "inline-flex h-10 max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors",
     active
       ? "border-primary bg-primary text-primary-foreground"
       : "border-border bg-card text-foreground hover:bg-muted"
@@ -12,6 +12,7 @@ export const chipClass = (active: boolean) =>
 export function Chip({
   active = false,
   className,
+  children,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
   return (
@@ -20,6 +21,8 @@ export function Chip({
       aria-pressed={active}
       className={cn(chipClass(active), className)}
       {...props}
-    />
+    >
+      <span className="truncate">{children}</span>
+    </button>
   );
 }
